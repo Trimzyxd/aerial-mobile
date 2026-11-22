@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Aerial Mobile",
+    "slug": "aerial-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#12141a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.aerial.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#12141a"
+      },
+      "package": "com.aerial.mobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-secure-store",
+      "expo-status-bar"
+    ]
+  }
+}
