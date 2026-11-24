@@ -113,66 +113,74 @@ export const VBucksVaultModal: React.FC<VBucksVaultModalProps> = ({
             {/* Accounts List */}
             <Text style={styles.sectionTitle}>Logged In Accounts ({accounts.length})</Text>
 
-            {accounts.map((acc) => (
-              <TouchableOpacity
-                key={acc.accountId}
-                style={[styles.accountCard, acc.isActive ? styles.accountCardActive : null]}
-                onPress={() => !acc.isActive && onSwitchAccount(acc.accountId)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.accountTopRow}>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Text style={styles.accountName}>{acc.displayName}</Text>
-                      {acc.isActive ? (
-                        <View style={styles.activePill}>
-                          <Text style={styles.activePillText}>ACTIVE</Text>
-                        </View>
-                      ) : null}
+            {accounts.length === 0 ? (
+              <View style={styles.emptyAccountBox}>
+                <Ionicons name="person-outline" size={32} color="#64748b" />
+                <Text style={styles.emptyAccountText}>No accounts connected yet.</Text>
+                <Text style={styles.emptyAccountSub}>Tap below to connect your Epic Games account.</Text>
+              </View>
+            ) : (
+              accounts.map((acc) => (
+                <TouchableOpacity
+                  key={acc.accountId}
+                  style={[styles.accountCard, acc.isActive ? styles.accountCardActive : null]}
+                  onPress={() => !acc.isActive && onSwitchAccount(acc.accountId)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.accountTopRow}>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.accountName}>{acc.displayName}</Text>
+                        {acc.isActive ? (
+                          <View style={styles.activePill}>
+                            <Text style={styles.activePillText}>ACTIVE</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text style={styles.accountSubId}>ID: {acc.accountId}</Text>
                     </View>
-                    <Text style={styles.accountSubId}>ID: {acc.accountId}</Text>
+
+                    <View style={styles.accountVbucksRight}>
+                      <Text style={styles.accountVbucksText}>
+                        {(acc.vbucks?.total || 0).toLocaleString()} <Text style={styles.vbUnitSmall}>VB</Text>
+                      </Text>
+                      <Text style={styles.accountVbucksSub}>
+                        Earned: {(acc.vbucks?.complimentary || 0).toLocaleString()}
+                      </Text>
+                    </View>
                   </View>
 
-                  <View style={styles.accountVbucksRight}>
-                    <Text style={styles.accountVbucksText}>
-                      {(acc.vbucks?.total || 0).toLocaleString()} <Text style={styles.vbUnitSmall}>VB</Text>
-                    </Text>
-                    <Text style={styles.accountVbucksSub}>
-                      Earned: {(acc.vbucks?.complimentary || 0).toLocaleString()}
-                    </Text>
-                  </View>
-                </View>
+                  <View style={styles.accountActionsRow}>
+                    <View style={styles.currentActiveLabel}>
+                      {acc.isActive ? (
+                        <>
+                          <Ionicons name="checkmark-circle" size={15} color="#22c55e" />
+                          <Text style={styles.currentActiveText}>Currently Selected</Text>
+                        </>
+                      ) : (
+                        <>
+                          <Ionicons name="radio-button-off" size={14} color="#64748b" />
+                          <Text style={{ color: '#94a3b8', fontSize: 11 }}>Tap to switch</Text>
+                        </>
+                      )}
+                    </View>
 
-                <View style={styles.accountActionsRow}>
-                  <View style={styles.currentActiveLabel}>
-                    {acc.isActive ? (
-                      <>
-                        <Ionicons name="checkmark-circle" size={15} color="#22c55e" />
-                        <Text style={styles.currentActiveText}>Currently Selected</Text>
-                      </>
-                    ) : (
-                      <>
-                        <Ionicons name="radio-button-off" size={14} color="#64748b" />
-                        <Text style={{ color: '#94a3b8', fontSize: 11 }}>Tap to switch</Text>
-                      </>
+                    {accounts.length > 1 && (
+                      <TouchableOpacity
+                        style={styles.trashBtn}
+                        onPress={(e) => {
+                          e.stopPropagation()
+                          confirmRemove(acc)
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                      </TouchableOpacity>
                     )}
                   </View>
-
-                  {accounts.length > 1 && (
-                    <TouchableOpacity
-                      style={styles.trashBtn}
-                      onPress={(e) => {
-                        e.stopPropagation()
-                        confirmRemove(acc)
-                      }}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="trash-outline" size={15} color="#ef4444" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              ))
+            )}
 
             {/* Add Account Button */}
             <TouchableOpacity
@@ -430,5 +438,26 @@ const styles = StyleSheet.create({
     color: '#38bdf8',
     fontSize: 13,
     fontWeight: '700'
+  },
+  emptyAccountBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    backgroundColor: '#121722',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1d2638',
+    marginBottom: 12
+  },
+  emptyAccountText: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8
+  },
+  emptyAccountSub: {
+    color: '#64748b',
+    fontSize: 12,
+    marginTop: 4
   }
 })

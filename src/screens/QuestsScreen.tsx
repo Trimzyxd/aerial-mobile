@@ -201,9 +201,19 @@ export const QuestsScreen: React.FC<QuestsScreenProps> = ({
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name="checkmark-circle-outline" size={40} color="#22c55e" />
-              <Text style={styles.emptyTitle}>All Daily Quests Cleared!</Text>
-              <Text style={styles.emptySub}>Next daily quest arrives at UTC 00:00.</Text>
+              {session ? (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={40} color="#22c55e" />
+                  <Text style={styles.emptyTitle}>All Daily Quests Cleared!</Text>
+                  <Text style={styles.emptySub}>Next daily quest arrives at UTC 00:00.</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="person-circle-outline" size={40} color="#64748b" />
+                  <Text style={styles.emptyTitle}>No Account Connected</Text>
+                  <Text style={styles.emptySub}>Sign in on the Account tab to view and manage daily quests.</Text>
+                </>
+              )}
             </View>
           }
         />

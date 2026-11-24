@@ -20,8 +20,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenVault
 }) => {
   const grandTotal = calculateGrandTotalVBucks(accounts)
-  const activeBalance = session?.vbucksBalance ?? 3450
-  const displayedVBucks = showGrandTotal && accounts.length > 0 ? grandTotal.total : activeBalance
+  const activeBalance = session?.vbucksBalance ?? 0
+  const displayedVBucks = showGrandTotal && accounts.length > 0 ? grandTotal.total : (session ? activeBalance : 0)
 
   return (
     <View style={styles.container}>
@@ -32,27 +32,29 @@ export const Header: React.FC<HeaderProps> = ({
 
       <View style={styles.rightCluster}>
         {/* V-Bucks Balance Pill */}
-        <TouchableOpacity
-          style={[styles.vbucksPill, showGrandTotal ? styles.vbucksPillGrand : null]}
-          onPress={onOpenVault}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="sparkles" size={13} color="#f59e0b" />
-          <Text style={styles.vbucksPillText}>
-            {displayedVBucks.toLocaleString()} <Text style={styles.vbSmall}>VB</Text>
-          </Text>
-          {showGrandTotal && (
-            <View style={styles.totalBadge}>
-              <Text style={styles.totalBadgeText}>ALL</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        {session ? (
+          <TouchableOpacity
+            style={[styles.vbucksPill, showGrandTotal ? styles.vbucksPillGrand : null]}
+            onPress={onOpenVault}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="sparkles" size={13} color="#f59e0b" />
+            <Text style={styles.vbucksPillText}>
+              {displayedVBucks.toLocaleString()} <Text style={styles.vbSmall}>VB</Text>
+            </Text>
+            {showGrandTotal && (
+              <View style={styles.totalBadge}>
+                <Text style={styles.totalBadgeText}>ALL</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        ) : null}
 
         {/* Account Avatar Badge */}
         <TouchableOpacity style={styles.accountBadge} onPress={onOpenVault} activeOpacity={0.7}>
           <Ionicons name="person-circle-outline" size={18} color="#38bdf8" />
           <Text style={styles.accountName} numberOfLines={1}>
-            {session ? session.displayName : 'Commander'}
+            {session ? session.displayName : 'Connect'}
           </Text>
         </TouchableOpacity>
       </View>

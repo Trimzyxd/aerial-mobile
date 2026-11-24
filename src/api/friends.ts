@@ -24,34 +24,22 @@ export interface BulkFriendAcceptResult {
   }>
 }
 
-const MOCK_FRIENDS: Friend[] = [
-  { accountId: 'acc-1', displayName: 'GhostNinja99', status: 'ONLINE' },
-  { accountId: 'acc-2', displayName: 'StormShieldCommander', status: 'ONLINE' },
-  { accountId: 'acc-3', displayName: 'VBucksGrinder_PH', status: 'AWAY' },
-  { accountId: 'acc-4', displayName: 'TwinePeakPro', status: 'OFFLINE', lastSeen: '2 hours ago' }
-]
-
-const MOCK_REQUESTS: FriendRequest[] = [
-  { accountId: 'req-1', displayName: 'LlamaHunter2026', direction: 'INCOMING', created: '10m ago' },
-  { accountId: 'req-2', displayName: 'Ray_Homebase', direction: 'INCOMING', created: '1h ago' },
-  { accountId: 'req-3', displayName: 'EpicSniperBot', direction: 'OUTGOING', created: '2d ago' }
-]
-
 export async function fetchFriendsSummary(accessToken?: string, accountId?: string): Promise<{ friends: Friend[]; requests: FriendRequest[] }> {
   if (!accessToken || !accountId) {
-    return { friends: MOCK_FRIENDS, requests: MOCK_REQUESTS }
+    return { friends: [], requests: [] }
   }
 
   try {
     const url = `https://friends-public-service-prod.ol.epicgames.com/friends/api/v1/${accountId}/summary`
     const res = await fetch(url, {
       headers: {
-        'Authorization': `bearer ${accessToken}`
+        'Authorization': `bearer ${accessToken}`,
+        'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
       }
     })
 
     if (!res.ok) {
-      return { friends: MOCK_FRIENDS, requests: MOCK_REQUESTS }
+      return { friends: [], requests: [] }
     }
 
     const data = await res.json()
@@ -95,7 +83,7 @@ export async function fetchFriendsSummary(accessToken?: string, accountId?: stri
     return { friends, requests }
   } catch (err) {
     console.warn('Error fetching friends summary', err)
-    return { friends: MOCK_FRIENDS, requests: MOCK_REQUESTS }
+    return { friends: [], requests: [] }
   }
 }
 

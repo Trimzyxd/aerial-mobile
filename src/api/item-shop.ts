@@ -4,205 +4,18 @@ export const GIFT_BOX_TEMPLATES: GiftBoxTemplate[] = [
   { id: 'GiftBox:gb_default', name: 'Standard', previewColor: '#3a3f58' }
 ]
 
-const MOCK_SHOP_ITEMS: ShopItem[] = [
-  {
-    id: 'item-bundle-1',
-    name: 'Nevermore Bundle',
-    description: 'Includes Raven, Ravage, Iron Beak Pickaxe, Dark Wings, and Dark Feathers.',
-    price: 2500,
-    regularPrice: 3800,
-    rarity: 'Legendary',
-    category: 'Bundles',
-    isBundle: true,
-    banner: '34% OFF',
-    images: {
-      icon: 'https://fortnite-api.com/images/cosmetics/br/cid_102_athena_commando_m_raven/featured.png'
-    },
-    grantedItems: [
-      {
-        id: 'cid-102',
-        name: 'Raven',
-        description: 'Master of the shadows.',
-        type: 'Outfit',
-        rarity: 'Legendary',
-        image: 'https://fortnite-api.com/images/cosmetics/br/cid_102_athena_commando_m_raven/icon.png'
-      },
-      {
-        id: 'cid-196',
-        name: 'Ravage',
-        description: 'Corvus corax.',
-        type: 'Outfit',
-        rarity: 'Legendary',
-        image: 'https://fortnite-api.com/images/cosmetics/br/cid_196_athena_commando_f_raven/icon.png'
-      },
-      {
-        id: 'bid-095',
-        name: 'Dark Wings',
-        description: 'Spread your dark wings.',
-        type: 'Back Bling',
-        rarity: 'Legendary',
-        image: 'https://fortnite-api.com/images/cosmetics/br/bid_095_darkwings/icon.png'
-      },
-      {
-        id: 'pickaxe-ironbeak',
-        name: 'Iron Beak',
-        description: 'Forged from fallen feathers.',
-        type: 'Pickaxe',
-        rarity: 'Rare',
-        image: 'https://fortnite-api.com/images/cosmetics/br/pickaxe_id_013_teslacoil/icon.png'
-      },
-      {
-        id: 'contrail-darkfeathers',
-        name: 'Dark Feathers',
-        description: 'Descend with shadow plumes.',
-        type: 'Contrail',
-        rarity: 'Rare',
-        image: 'https://fortnite-api.com/images/cosmetics/br/trails_id_012_darkfeathers/icon.png'
-      }
-    ],
-    giftable: true,
-    expires: new Date(Date.now() + 14 * 3600000).toISOString()
-  },
-  {
-    id: 'item-1',
-    name: 'Raven',
-    description: 'Master of the shadows. Includes Dark Wings Back Bling.',
-    price: 2000,
-    regularPrice: 2000,
-    rarity: 'Legendary',
-    category: 'Featured',
-    isBundle: false,
-    images: {
-      icon: 'https://fortnite-api.com/images/cosmetics/br/cid_102_athena_commando_m_raven/icon.png',
-      featured: 'https://fortnite-api.com/images/cosmetics/br/cid_102_athena_commando_m_raven/featured.png'
-    },
-    grantedItems: [
-      {
-        id: 'cid-102',
-        name: 'Raven',
-        description: 'Master of the shadows.',
-        type: 'Outfit',
-        rarity: 'Legendary',
-        image: 'https://fortnite-api.com/images/cosmetics/br/cid_102_athena_commando_m_raven/icon.png'
-      },
-      {
-        id: 'bid-095',
-        name: 'Dark Wings',
-        description: 'Spread your dark wings.',
-        type: 'Back Bling',
-        rarity: 'Legendary',
-        image: 'https://fortnite-api.com/images/cosmetics/br/bid_095_darkwings/icon.png'
-      }
-    ],
-    giftable: true,
-    expires: new Date(Date.now() + 14 * 3600000).toISOString()
-  },
-  {
-    id: 'item-2',
-    name: 'Cuddle Team Leader',
-    description: 'Hugs all around. Includes Cuddle Bow Back Bling.',
-    price: 1500,
-    regularPrice: 1500,
-    rarity: 'Legendary',
-    category: 'Featured',
-    isBundle: false,
-    images: {
-      icon: 'https://fortnite-api.com/images/cosmetics/br/cid_069_athena_commando_f_pinkbear/icon.png',
-      featured: 'https://fortnite-api.com/images/cosmetics/br/cid_069_athena_commando_f_pinkbear/featured.png'
-    },
-    grantedItems: [
-      {
-        id: 'cid-069',
-        name: 'Cuddle Team Leader',
-        description: 'Hugs all around.',
-        type: 'Outfit',
-        rarity: 'Legendary',
-        image: 'https://fortnite-api.com/images/cosmetics/br/cid_069_athena_commando_f_pinkbear/icon.png'
-      },
-      {
-        id: 'bid-069',
-        name: 'Cuddle Bow',
-        description: 'All wrapped up.',
-        type: 'Back Bling',
-        rarity: 'Legendary',
-        image: 'https://fortnite-api.com/images/cosmetics/br/bid_069_cuddlebow/icon.png'
-      }
-    ],
-    giftable: true,
-    expires: new Date(Date.now() + 14 * 3600000).toISOString()
-  },
-  {
-    id: 'item-3',
-    name: 'Skull Trooper',
-    description: 'Victory runs bone deep. Includes Ghost Portal Back Bling.',
-    price: 1500,
-    regularPrice: 1500,
-    rarity: 'Epic',
-    category: 'Daily',
-    isBundle: false,
-    images: {
-      icon: 'https://fortnite-api.com/images/cosmetics/br/cid_030_athena_commando_m_halloween/icon.png'
-    },
-    grantedItems: [
-      {
-        id: 'cid-030',
-        name: 'Skull Trooper',
-        description: 'Victory runs bone deep.',
-        type: 'Outfit',
-        rarity: 'Epic',
-        image: 'https://fortnite-api.com/images/cosmetics/br/cid_030_athena_commando_m_halloween/icon.png'
-      },
-      {
-        id: 'bid-ghostportal',
-        name: 'Ghost Portal',
-        description: 'A glimpse into the beyond.',
-        type: 'Back Bling',
-        rarity: 'Epic',
-        image: 'https://fortnite-api.com/images/cosmetics/br/bid_103_ghostportal/icon.png'
-      }
-    ],
-    giftable: true,
-    expires: new Date(Date.now() + 14 * 3600000).toISOString()
-  },
-  {
-    id: 'item-4',
-    name: 'Nevermore Pickaxe',
-    description: 'Forged from fallen feathers.',
-    price: 800,
-    regularPrice: 800,
-    rarity: 'Rare',
-    category: 'Daily',
-    isBundle: false,
-    images: {
-      icon: 'https://fortnite-api.com/images/cosmetics/br/pickaxe_id_013_teslacoil/icon.png'
-    },
-    grantedItems: [
-      {
-        id: 'pickaxe-ironbeak',
-        name: 'Iron Beak',
-        description: 'Forged from fallen feathers.',
-        type: 'Pickaxe',
-        rarity: 'Rare',
-        image: 'https://fortnite-api.com/images/cosmetics/br/pickaxe_id_013_teslacoil/icon.png'
-      }
-    ],
-    giftable: true,
-    expires: new Date(Date.now() + 14 * 3600000).toISOString()
-  }
-]
-
 export async function fetchItemShop(): Promise<{ items: ShopItem[]; categories: string[] }> {
   try {
     const res = await fetch('https://fortnite-api.com/v2/shop')
     if (!res.ok) {
-      console.warn('Shop endpoint returned error status, using mock data')
-      return { items: MOCK_SHOP_ITEMS, categories: ['All', 'Bundles', 'Featured', 'Daily'] }
+      console.warn('Shop endpoint returned error status')
+      return { items: [], categories: ['All'] }
     }
 
     const json = await res.json()
     const entries = json?.data?.entries || []
     if (!Array.isArray(entries) || entries.length === 0) {
-      return { items: MOCK_SHOP_ITEMS, categories: ['All', 'Bundles', 'Featured', 'Daily'] }
+      return { items: [], categories: ['All'] }
     }
 
     const items: ShopItem[] = []
@@ -358,8 +171,8 @@ export async function fetchItemShop(): Promise<{ items: ShopItem[]; categories: 
 
     return { items, categories: sortedCategories }
   } catch (err) {
-    console.warn('Error fetching shop, using mock fallback', err)
-    return { items: MOCK_SHOP_ITEMS, categories: ['All', 'Bundles', 'Featured', 'Daily'] }
+    console.warn('Error fetching shop', err)
+    return { items: [], categories: ['All'] }
   }
 }
 
@@ -375,7 +188,7 @@ export async function purchaseItem({
   accountId?: string
 }): Promise<{ success: boolean; message: string }> {
   if (!accessToken || !accountId) {
-    return { success: true, message: 'Item purchased successfully! (Simulation mode)' }
+    return { success: false, message: 'Please sign in to an Epic Games account to purchase items.' }
   }
 
   try {
@@ -450,9 +263,9 @@ export async function sendGift({
 }: SendGiftParams): Promise<{ success: boolean; message: string; code?: string }> {
   const recipientName = receiverDisplayName || 'Friend'
 
-  // 1. Simulation mode check
+  // 1. Authentication check
   if (!accessToken || !accountId) {
-    return { success: true, message: `Gift simulation: ${itemName} delivered to ${recipientName}!` }
+    return { success: false, message: 'Please sign in to an Epic Games account to send gifts.' }
   }
 
   // 2. Prevent self-gifting

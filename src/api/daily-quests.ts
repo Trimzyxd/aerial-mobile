@@ -55,51 +55,11 @@ export function evaluateBlacklist(quest: DailyQuest, config: AutoRerollConfig): 
   return { isBlacklisted: false }
 }
 
-const MOCK_QUESTS: DailyQuest[] = [
-  {
-    id: 'quest-1',
-    templateId: 'Quest:daily_destroyarcademachines',
-    name: 'Destroy Arcade Machines',
-    description: 'Destroy 6 Arcade Machines in successful missions in Suburban, City, or Industrial zones.',
-    progress: 4,
-    target: 6,
-    vbucksReward: 50,
-    canReroll: true
-  },
-  {
-    id: 'quest-2',
-    templateId: 'Quest:daily_mission_specialist_outlander',
-    name: 'Mission Specialist (Outlander)',
-    description: 'Complete 3 missions as an Outlander.',
-    progress: 1,
-    target: 3,
-    vbucksReward: 50,
-    canReroll: true
-  },
-  {
-    id: 'quest-3',
-    templateId: 'Quest:daily_all_together_now',
-    name: 'All Together Now',
-    description: 'Complete 3 missions with other players.',
-    progress: 0,
-    target: 3,
-    vbucksReward: 100,
-    canReroll: false
-  }
-]
-
 export async function fetchDailyQuests(accessToken?: string, accountId?: string): Promise<DailyQuest[]> {
   const config = await loadAutoRerollConfig()
 
   if (!accessToken || !accountId) {
-    return MOCK_QUESTS.map(q => {
-      const evalRes = evaluateBlacklist(q, config)
-      return {
-        ...q,
-        isBlacklisted: evalRes.isBlacklisted,
-        blacklistReason: evalRes.reason
-      }
-    })
+    return []
   }
 
   try {
@@ -108,21 +68,15 @@ export async function fetchDailyQuests(accessToken?: string, accountId?: string)
       method: 'POST',
       headers: {
         'Authorization': `bearer ${accessToken}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
       },
       body: JSON.stringify({})
     })
 
     if (!res.ok) {
-      console.warn('Failed to fetch Epic campaign profile, using mock quests')
-      return MOCK_QUESTS.map(q => {
-        const evalRes = evaluateBlacklist(q, config)
-        return {
-          ...q,
-          isBlacklisted: evalRes.isBlacklisted,
-          blacklistReason: evalRes.reason
-        }
-      })
+      console.warn('Failed to fetch Epic campaign profile')
+      return []
     }
 
     const data = await res.json()
@@ -152,30 +106,16 @@ export async function fetchDailyQuests(accessToken?: string, accountId?: string)
       }
     }
 
-    return quests.length > 0 ? quests : MOCK_QUESTS.map(q => {
-      const evalRes = evaluateBlacklist(q, config)
-      return {
-        ...q,
-        isBlacklisted: evalRes.isBlacklisted,
-        blacklistReason: evalRes.reason
-      }
-    })
+    return quests
   } catch (err) {
     console.warn('Network error querying daily quests', err)
-    return MOCK_QUESTS.map(q => {
-      const evalRes = evaluateBlacklist(q, config)
-      return {
-        ...q,
-        isBlacklisted: evalRes.isBlacklisted,
-        blacklistReason: evalRes.reason
-      }
-    })
+    return []
   }
 }
 
 export async function rerollDailyQuest(questId: string, accessToken?: string, accountId?: string): Promise<{ success: boolean; message: string }> {
   if (!accessToken || !accountId) {
-    return { success: true, message: 'Quest rerolled (Simulation mode)' }
+    return { success: false, message: 'Please sign in to an Epic Games account to reroll quests.' }
   }
 
   try {

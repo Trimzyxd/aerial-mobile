@@ -286,7 +286,20 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No friends found.</Text>
+              <Ionicons
+                name={session ? "people-outline" : "person-circle-outline"}
+                size={36}
+                color="#64748b"
+                style={{ marginBottom: 8 }}
+              />
+              <Text style={styles.emptyText}>
+                {session ? 'No friends found on this account.' : 'No Epic account connected.'}
+              </Text>
+              {!session && (
+                <Text style={{ color: '#64748b', fontSize: 12, marginTop: 4 }}>
+                  Sign in on the Account tab to view your friends list.
+                </Text>
+              )}
             </View>
           }
         />
@@ -315,7 +328,15 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No incoming or outgoing requests.</Text>
+              <Ionicons
+                name="mail-outline"
+                size={36}
+                color="#64748b"
+                style={{ marginBottom: 8 }}
+              />
+              <Text style={styles.emptyText}>
+                {session ? 'No incoming or outgoing requests.' : 'Sign in on the Account tab to view friend requests.'}
+              </Text>
             </View>
           }
         />

@@ -14,11 +14,16 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { Header } from '../components/Header'
 import {
-  loginWithExchangeCode,
+  loginWithCode,
   logoutSession,
   switchActiveAccount,
   removeAccount,
-  calculateGrandTotalVBucks
+  calculateGrandTotalVBucks,
+  fetchAccountVbucks,
+  loadAllAccounts,
+  saveAllAccounts,
+  EPIC_LOGIN_AUTH_URL,
+  EPIC_LOGIN_FALLBACK_URL
 } from '../api/epic-auth'
 import { EpicAccountSession, SavedAccount } from '../types'
 
@@ -41,34 +46,65 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
   onToggleGrandTotal,
   onOpenVault
 }) => {
-  const [exchangeCode, setExchangeCode] = useState<string>('')
+  const [authInput, setAuthInput] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
+  const [refreshingBalance, setRefreshingBalance] = useState<boolean>(false)
 
   const grandTotal = calculateGrandTotalVBucks(accounts)
   const activeVBucks = session?.vbucksDetail || {
-    total: session?.vbucksBalance ?? 3450,
-    complimentary: 2450,
-    purchased: 1000
+    total: session?.vbucksBalance ?? 0,
+    complimentary: 0,
+    purchased: 0
   }
 
-  const handleLogin = async () => {
-    if (!exchangeCode.trim()) {
-      Alert.alert('Missing Code', 'Please paste a valid Epic Games exchange code.')
+  const handleConnect = async () => {
+    if (!authInput.trim()) {
+      Alert.alert('Missing Input', 'Please paste the 32-character code or full redirect URL from Epic Games.')
       return
     }
 
     setLoading(true)
     try {
-      const newSession = await loginWithExchangeCode(exchangeCode.trim())
-      if (newSession) {
-        onSessionChange(newSession)
-        setExchangeCode('')
-        Alert.alert('Logged In', `Connected account: ${newSession.displayName}!`)
+      const res = await loginWithCode(authInput.trim())
+      if (res.success && res.session) {
+        onSessionChange(res.session)
+        const updatedAccounts = await loadAllAccounts()
+        onAccountsChange(updatedAccounts)
+        setAuthInput('')
+        Alert.alert('Account Connected!', `Welcome, ${res.session.displayName}! Permanent device auth active.`)
       } else {
-        Alert.alert('Login Failed', 'Could not authenticate exchange code. Ensure it is not expired.')
+        Alert.alert(
+          'Authentication Failed',
+          res.error || 'Could not verify code. Please generate a fresh login code and try again.'
+        )
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRefreshBalance = async () => {
+    if (!session) return
+    setRefreshingBalance(true)
+    try {
+      const vbucks = await fetchAccountVbucks(session.accessToken, session.accountId)
+      const updatedSession: EpicAccountSession = {
+        ...session,
+        vbucksBalance: vbucks.total,
+        vbucksDetail: vbucks
+      }
+      onSessionChange(updatedSession)
+      const all = await loadAllAccounts()
+      const updatedAll = all.map((a) =>
+        a.accountId === session.accountId ? { ...a, vbucks } : a
+      )
+      await saveAllAccounts(updatedAll)
+      onAccountsChange(updatedAll)
+      Alert.alert('Balance Updated', `Live balance: ${vbucks.total.toLocaleString()} V-Bucks`)
+    } catch {
+      Alert.alert('Error', 'Could not refresh V-Bucks balance.')
+    } finally {
+      setRefreshingBalance(false)
     }
   }
 
@@ -80,7 +116,7 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
         displayName: switched.displayName,
         accessToken: switched.accessToken,
         expiresAt: switched.expiresAt,
-        vbucksBalance: switched.vbucks.total,
+        vbucksBalance: switched.vbucks?.total || 0,
         vbucksDetail: switched.vbucks
       })
       const updated = accounts.map((a) => ({
@@ -92,27 +128,54 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
   }
 
   const handleRemove = async (accountId: string) => {
-    const updated = await removeAccount(accountId)
-    onAccountsChange(updated)
-    const active = updated.find((a) => a.isActive) || updated[0] || null
-    if (active) {
-      onSessionChange({
-        accountId: active.accountId,
-        displayName: active.displayName,
-        accessToken: active.accessToken,
-        expiresAt: active.expiresAt,
-        vbucksBalance: active.vbucks.total,
-        vbucksDetail: active.vbucks
-      })
-    } else {
-      onSessionChange(null)
-    }
+    Alert.alert('Remove Account', 'Are you sure you want to remove this account from Aerial?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          const updated = await removeAccount(accountId)
+          onAccountsChange(updated)
+          const active = updated.find((a) => a.isActive) || updated[0] || null
+          if (active) {
+            onSessionChange({
+              accountId: active.accountId,
+              displayName: active.displayName,
+              accessToken: active.accessToken,
+              expiresAt: active.expiresAt,
+              vbucksBalance: active.vbucks?.total || 0,
+              vbucksDetail: active.vbucks
+            })
+          } else {
+            onSessionChange(null)
+          }
+        }
+      }
+    ])
   }
 
-  const openCodeUrl = () => {
-    Linking.openURL(
-      'https://www.epicgames.com/id/api/redirect?clientId=3446270ad57743c681c780b184e49e94&responseType=code'
-    )
+  const handleLogout = async () => {
+    Alert.alert('Log Out', 'Disconnect all accounts and log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: async () => {
+          await logoutSession()
+          await saveAllAccounts([])
+          onSessionChange(null)
+          onAccountsChange([])
+        }
+      }
+    ])
+  }
+
+  const openAuthUrl = () => {
+    Linking.openURL(EPIC_LOGIN_AUTH_URL)
+  }
+
+  const openFallbackUrl = () => {
+    Linking.openURL(EPIC_LOGIN_FALLBACK_URL)
   }
 
   return (
@@ -126,155 +189,267 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Grand Total Across All Accounts Card */}
-        <View style={styles.grandVaultCard}>
-          <View style={styles.grandVaultHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="sparkles" size={16} color="#fbbf24" />
-              <Text style={styles.grandVaultTitle}>Total Across All Accounts</Text>
-            </View>
-            <View style={styles.countBadge}>
-              <Text style={styles.countBadgeText}>{accounts.length} Accounts</Text>
-            </View>
-          </View>
-
-          <Text style={styles.grandVaultNum}>
-            {grandTotal.total.toLocaleString()} <Text style={styles.unitText}>V-Bucks</Text>
-          </Text>
-
-          <View style={styles.breakdownRow}>
-            <View style={styles.breakdownCol}>
-              <Text style={styles.breakdownLabel}>Earned (STW / BP)</Text>
-              <Text style={styles.breakdownNumber}>+{grandTotal.complimentary.toLocaleString()}</Text>
-            </View>
-            <View style={styles.breakdownDivider} />
-            <View style={styles.breakdownCol}>
-              <Text style={styles.breakdownLabel}>Purchased (Store)</Text>
-              <Text style={styles.breakdownNumber}>+{grandTotal.purchased.toLocaleString()}</Text>
-            </View>
-          </View>
-
-          <View style={styles.headerToggleBox}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.toggleText}>Show Total in Top Bar</Text>
-              <Text style={styles.toggleDesc}>Display combined V-Bucks sum across all accounts</Text>
-            </View>
-            <Switch
-              value={showGrandTotal}
-              onValueChange={onToggleGrandTotal}
-              trackColor={{ false: '#334155', true: '#d97706' }}
-              thumbColor={showGrandTotal ? '#fbbf24' : '#64748b'}
-            />
-          </View>
-        </View>
-
-        {/* Current Active Account Card */}
-        <View style={styles.card}>
-          <View style={styles.activeHeader}>
-            <View style={styles.avatar}>
-              <Ionicons name="person" size={24} color="#38bdf8" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.accountTitle}>{session?.displayName || 'Commander'}</Text>
-              <Text style={styles.accountIdText}>ID: {session?.accountId || 'demo-main-01'}</Text>
-            </View>
-            <View style={styles.statusPill}>
-              <Ionicons name="checkmark-circle" size={13} color="#22c55e" />
-              <Text style={styles.statusPillText}>ACTIVE</Text>
-            </View>
-          </View>
-
-          {/* Active Account V-Bucks Detail */}
-          <View style={styles.activeVBucksBox}>
-            <Text style={styles.activeVBucksLabel}>Active Account Balance</Text>
-            <Text style={styles.activeVBucksValue}>
-              {activeVBucks.total.toLocaleString()} <Text style={{ fontSize: 13, color: '#fef3c7' }}>VB</Text>
-            </Text>
-            <View style={styles.activeVBucksSubRow}>
-              <Text style={styles.activeVBucksSubItem}>
-                STW Earned: <Text style={{ color: '#ffffff', fontWeight: '700' }}>{activeVBucks.complimentary.toLocaleString()}</Text>
-              </Text>
-              <Text style={styles.activeVBucksSubItem}>
-                Purchased: <Text style={{ color: '#ffffff', fontWeight: '700' }}>{activeVBucks.purchased.toLocaleString()}</Text>
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Multi-Account Switcher */}
-        <Text style={styles.sectionHeader}>Saved Accounts ({accounts.length})</Text>
-
-        {accounts.map((acc) => (
-          <TouchableOpacity
-            key={acc.accountId}
-            style={[styles.accountItem, acc.isActive ? styles.accountItemActive : null]}
-            onPress={() => !acc.isActive && handleSwitch(acc.accountId)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.accountItemLeft}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={styles.accountItemName}>{acc.displayName}</Text>
-                {acc.isActive && (
-                  <View style={styles.itemActivePill}>
-                    <Text style={styles.itemActivePillText}>Active</Text>
-                  </View>
-                )}
+        {/* State A: No Accounts Connected */}
+        {accounts.length === 0 || !session ? (
+          <View>
+            <View style={styles.onboardHero}>
+              <View style={styles.iconCircle}>
+                <Ionicons name="game-controller" size={32} color="#38bdf8" />
               </View>
-              <Text style={styles.accountItemVBucks}>
-                {(acc.vbucks?.total || 0).toLocaleString()} VB · Earned: {(acc.vbucks?.complimentary || 0).toLocaleString()}
+              <Text style={styles.onboardTitle}>Connect Epic Games Account</Text>
+              <Text style={styles.onboardSubtitle}>
+                Sign in to view your live STW mission alerts, daily quests, auto-reroll, item shop, and friends list.
               </Text>
             </View>
 
-            <View style={styles.accountItemRight}>
-              {acc.isActive ? (
-                <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
-              ) : (
-                <Ionicons name="radio-button-off" size={18} color="#64748b" />
-              )}
+            {/* Step 1 Card */}
+            <View style={styles.stepCard}>
+              <View style={styles.stepBadge}>
+                <Text style={styles.stepBadgeText}>STEP 1</Text>
+              </View>
+              <Text style={styles.stepTitle}>Authorize Epic Games Account</Text>
+              <Text style={styles.stepDesc}>
+                Tap below to open the Epic Games login portal in your browser. Log in and confirm authorization.
+              </Text>
 
-              {accounts.length > 1 && (
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => handleRemove(acc.accountId)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="trash-outline" size={14} color="#ef4444" />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity style={styles.primaryAuthBtn} onPress={openAuthUrl} activeOpacity={0.8}>
+                <Ionicons name="open-outline" size={18} color="#ffffff" />
+                <Text style={styles.primaryAuthBtnText}>1. Open Epic Games Login</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={openFallbackUrl} style={{ marginTop: 8 }}>
+                <Text style={styles.fallbackLinkText}>Having trouble? Try Alternative Login Link</Text>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-        ))}
 
-        {/* Add Another Account Section */}
-        <View style={styles.card}>
-          <Text style={styles.loginTitle}>Connect Another Epic Account</Text>
-          <Text style={styles.loginSub}>
-            Generate an exchange code to add secondary or alt accounts and track combined V-Bucks.
-          </Text>
+            {/* Step 2 Card */}
+            <View style={styles.stepCard}>
+              <View style={styles.stepBadge}>
+                <Text style={styles.stepBadgeText}>STEP 2</Text>
+              </View>
+              <Text style={styles.stepTitle}>Paste Redirect Code or URL</Text>
+              <Text style={styles.stepDesc}>
+                After logging in, copy the full URL from the browser address bar (or the 32-character code) and paste it below:
+              </Text>
 
-          <TouchableOpacity style={styles.linkBtn} onPress={openCodeUrl}>
-            <Ionicons name="open-outline" size={14} color="#38bdf8" />
-            <Text style={styles.linkBtnText}>Get Exchange Code in Browser</Text>
-          </TouchableOpacity>
+              <TextInput
+                style={styles.input}
+                placeholder="Paste full URL or 32-character code..."
+                placeholderTextColor="#64748b"
+                value={authInput}
+                onChangeText={setAuthInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+                multiline={false}
+              />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Paste 32-character exchange code..."
-            placeholderTextColor="#64748b"
-            value={exchangeCode}
-            onChangeText={setExchangeCode}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+              <TouchableOpacity
+                style={[styles.connectBtn, loading ? styles.connectBtnDisabled : null]}
+                onPress={handleConnect}
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Ionicons name="link" size={16} color="#ffffff" />
+                    <Text style={styles.connectBtnText}>2. Connect Account</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
 
-          <TouchableOpacity style={styles.loginBtn} onPress={handleLogin} disabled={loading}>
-            {loading ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <Text style={styles.loginBtnText}>+ Connect Account</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+            {/* Security Callout */}
+            <View style={styles.infoBanner}>
+              <Ionicons name="shield-checkmark" size={18} color="#22c55e" style={{ marginRight: 8 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.infoBannerTitle}>Permanent Device Auth & Local Security</Text>
+                <Text style={styles.infoBannerText}>
+                  Aerial creates permanent Device Auth credentials directly with Epic Games. Sessions refresh automatically in the background without needing to log in again. All tokens are encrypted securely on this device.
+                </Text>
+              </View>
+            </View>
+          </View>
+        ) : (
+          /* State B: Logged In Account Dashboard */
+          <View>
+            {/* Grand Total Across All Accounts Card */}
+            <View style={styles.grandVaultCard}>
+              <View style={styles.grandVaultHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="sparkles" size={16} color="#fbbf24" />
+                  <Text style={styles.grandVaultTitle}>Total Across All Accounts</Text>
+                </View>
+                <View style={styles.countBadge}>
+                  <Text style={styles.countBadgeText}>{accounts.length} Accounts</Text>
+                </View>
+              </View>
+
+              <Text style={styles.grandVaultNum}>
+                {grandTotal.total.toLocaleString()} <Text style={styles.unitText}>V-Bucks</Text>
+              </Text>
+
+              <View style={styles.breakdownRow}>
+                <View style={styles.breakdownCol}>
+                  <Text style={styles.breakdownLabel}>Earned (STW / BP)</Text>
+                  <Text style={styles.breakdownNumber}>+{grandTotal.complimentary.toLocaleString()}</Text>
+                </View>
+                <View style={styles.breakdownDivider} />
+                <View style={styles.breakdownCol}>
+                  <Text style={styles.breakdownLabel}>Purchased (Store)</Text>
+                  <Text style={styles.breakdownNumber}>+{grandTotal.purchased.toLocaleString()}</Text>
+                </View>
+              </View>
+
+              <View style={styles.headerToggleBox}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.toggleText}>Show Total in Top Bar</Text>
+                  <Text style={styles.toggleDesc}>Display combined V-Bucks sum across all accounts</Text>
+                </View>
+                <Switch
+                  value={showGrandTotal}
+                  onValueChange={onToggleGrandTotal}
+                  trackColor={{ false: '#334155', true: '#d97706' }}
+                  thumbColor={showGrandTotal ? '#fbbf24' : '#64748b'}
+                />
+              </View>
+            </View>
+
+            {/* Current Active Account Card */}
+            <View style={styles.card}>
+              <View style={styles.activeHeader}>
+                <View style={styles.avatar}>
+                  <Ionicons name="person" size={24} color="#38bdf8" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.accountTitle}>{session.displayName}</Text>
+                  <Text style={styles.accountIdText}>ID: {session.accountId}</Text>
+                </View>
+                <View style={styles.statusPill}>
+                  <Ionicons name="shield-checkmark" size={13} color="#22c55e" />
+                  <Text style={styles.statusPillText}>DEVICE AUTH</Text>
+                </View>
+              </View>
+
+              {/* Active Account V-Bucks Detail */}
+              <View style={styles.activeVBucksBox}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.activeVBucksLabel}>Active Account Balance</Text>
+                  <TouchableOpacity
+                    style={styles.refreshBalanceBtn}
+                    onPress={handleRefreshBalance}
+                    disabled={refreshingBalance}
+                  >
+                    {refreshingBalance ? (
+                      <ActivityIndicator size="small" color="#38bdf8" />
+                    ) : (
+                      <>
+                        <Ionicons name="sync" size={12} color="#38bdf8" />
+                        <Text style={styles.refreshBalanceText}>Refresh</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.activeVBucksValue}>
+                  {activeVBucks.total.toLocaleString()} <Text style={{ fontSize: 13, color: '#fef3c7' }}>VB</Text>
+                </Text>
+                <View style={styles.activeVBucksSubRow}>
+                  <Text style={styles.activeVBucksSubItem}>
+                    STW Earned: <Text style={{ color: '#ffffff', fontWeight: '700' }}>{activeVBucks.complimentary.toLocaleString()}</Text>
+                  </Text>
+                  <Text style={styles.activeVBucksSubItem}>
+                    Purchased: <Text style={{ color: '#ffffff', fontWeight: '700' }}>{activeVBucks.purchased.toLocaleString()}</Text>
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+                <Ionicons name="log-out-outline" size={14} color="#ef4444" />
+                <Text style={styles.logoutBtnText}>Log Out All Accounts</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Multi-Account Switcher */}
+            <Text style={styles.sectionHeader}>Saved Accounts ({accounts.length})</Text>
+
+            {accounts.map((acc) => (
+              <TouchableOpacity
+                key={acc.accountId}
+                style={[styles.accountItem, acc.isActive ? styles.accountItemActive : null]}
+                onPress={() => !acc.isActive && handleSwitch(acc.accountId)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.accountItemLeft}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.accountItemName}>{acc.displayName}</Text>
+                    {acc.isActive && (
+                      <View style={styles.itemActivePill}>
+                        <Text style={styles.itemActivePillText}>Active</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.accountItemVBucks}>
+                    {(acc.vbucks?.total || 0).toLocaleString()} VB · Earned: {(acc.vbucks?.complimentary || 0).toLocaleString()}
+                  </Text>
+                </View>
+
+                <View style={styles.accountItemRight}>
+                  {acc.isActive ? (
+                    <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
+                  ) : (
+                    <Ionicons name="radio-button-off" size={18} color="#64748b" />
+                  )}
+
+                  {accounts.length > 1 && (
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => handleRemove(acc.accountId)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+
+            {/* Add Another Account Section */}
+            <View style={styles.card}>
+              <Text style={styles.loginTitle}>Connect Another Epic Account</Text>
+              <Text style={styles.loginSub}>
+                Add alt or secondary accounts to track combined V-Bucks and perform bulk actions.
+              </Text>
+
+              <TouchableOpacity style={styles.linkBtn} onPress={openAuthUrl}>
+                <Ionicons name="open-outline" size={14} color="#38bdf8" />
+                <Text style={styles.linkBtnText}>1. Open Epic Games Login in Browser</Text>
+              </TouchableOpacity>
+
+              <TextInput
+                style={styles.input}
+                placeholder="2. Paste full URL or 32-character code..."
+                placeholderTextColor="#64748b"
+                value={authInput}
+                onChangeText={setAuthInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <TouchableOpacity
+                style={[styles.loginBtn, loading ? styles.connectBtnDisabled : null]}
+                onPress={handleConnect}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.loginBtnText}>+ Connect Account</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </ScrollView>
     </View>
   )
@@ -287,7 +462,141 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 30
+    paddingBottom: 36
+  },
+  onboardHero: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    marginBottom: 16
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#162238',
+    borderWidth: 1,
+    borderColor: '#0284c7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12
+  },
+  onboardTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#f8fafc',
+    textAlign: 'center',
+    marginBottom: 6
+  },
+  onboardSubtitle: {
+    fontSize: 13,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 12
+  },
+  stepCard: {
+    backgroundColor: '#161b26',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#232b3d',
+    marginBottom: 14
+  },
+  stepBadge: {
+    backgroundColor: '#0369a1',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginBottom: 8
+  },
+  stepBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800'
+  },
+  stepTitle: {
+    color: '#f8fafc',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4
+  },
+  stepDesc: {
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 12
+  },
+  primaryAuthBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0284c7',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 8
+  },
+  primaryAuthBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700'
+  },
+  fallbackLinkText: {
+    color: '#38bdf8',
+    fontSize: 11,
+    textAlign: 'center',
+    textDecorationLine: 'underline',
+    paddingVertical: 4
+  },
+  input: {
+    backgroundColor: '#0f1420',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#26344d',
+    color: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    marginBottom: 12
+  },
+  connectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10b981',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 8
+  },
+  connectBtnDisabled: {
+    opacity: 0.6
+  },
+  connectBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700'
+  },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#0f1f1d',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#134e4a',
+    marginTop: 4,
+    marginBottom: 16
+  },
+  infoBannerTitle: {
+    color: '#86efac',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 3
+  },
+  infoBannerText: {
+    color: '#94a3b8',
+    fontSize: 11,
+    lineHeight: 16
   },
   grandVaultCard: {
     backgroundColor: '#261804',
@@ -429,18 +738,32 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#1f2a3e'
+    borderColor: '#1f2a3e',
+    marginBottom: 12
   },
   activeVBucksLabel: {
     color: '#94a3b8',
-    fontSize: 11,
-    marginBottom: 2
+    fontSize: 11
+  },
+  refreshBalanceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: '#16233a',
+    borderRadius: 6
+  },
+  refreshBalanceText: {
+    color: '#38bdf8',
+    fontSize: 10,
+    fontWeight: '700'
   },
   activeVBucksValue: {
     color: '#fbbf24',
     fontSize: 22,
     fontWeight: '800',
-    marginBottom: 6
+    marginVertical: 4
   },
   activeVBucksSubRow: {
     flexDirection: 'row',
@@ -449,6 +772,20 @@ const styles = StyleSheet.create({
   activeVBucksSubItem: {
     color: '#64748b',
     fontSize: 11
+  },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#1e2638'
+  },
+  logoutBtnText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '600'
   },
   sectionHeader: {
     color: '#94a3b8',
@@ -502,20 +839,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8
   },
-  switchButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0f2942',
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    gap: 4
-  },
-  switchButtonText: {
-    color: '#38bdf8',
-    fontSize: 11,
-    fontWeight: '700'
-  },
   deleteButton: {
     padding: 4
   },
@@ -548,17 +871,6 @@ const styles = StyleSheet.create({
     color: '#38bdf8',
     fontSize: 11,
     fontWeight: '600'
-  },
-  input: {
-    backgroundColor: '#0f1420',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#26344d',
-    color: '#f8fafc',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 12,
-    marginBottom: 12
   },
   loginBtn: {
     backgroundColor: '#0284c7',

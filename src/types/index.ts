@@ -110,6 +110,8 @@ export interface SavedAccount {
   displayName: string
   accessToken: string
   expiresAt: string
+  deviceId?: string
+  secret?: string
   vbucks: VBucksDetail
   isActive: boolean
 }
@@ -119,6 +121,8 @@ export interface EpicAccountSession {
   displayName: string
   accessToken: string
   expiresAt: string
+  deviceId?: string
+  secret?: string
   vbucksBalance?: number
   vbucksDetail?: VBucksDetail
 }
