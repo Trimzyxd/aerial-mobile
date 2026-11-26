@@ -42,10 +42,21 @@ export interface AutoRerollSummary {
   success: boolean
   rerolledCount: number
   details: Array<{
+    accountName?: string
     questName: string
     reason: string
     success: boolean
+    message?: string
   }>
+}
+
+export interface AccountDailyQuestsGroup {
+  accountId: string
+  displayName: string
+  quests: DailyQuest[]
+  rerollsRemaining: number
+  error?: string
+  needsRelogin?: boolean
 }
 
 export interface Friend {

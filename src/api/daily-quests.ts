@@ -1,4 +1,4 @@
-import { DailyQuest, AutoRerollConfig, AutoRerollSummary } from '../types'
+import { DailyQuest, AutoRerollConfig, AutoRerollSummary, SavedAccount, AccountDailyQuestsGroup } from '../types'
 import { getSecureItem, saveSecureItem } from '../utils/storage'
 import { forceRefreshAccountToken, loadAllAccounts } from './epic-auth'
 
@@ -308,6 +308,48 @@ export async function fetchDailyQuests(accessToken?: string, accountId?: string)
   return result.quests
 }
 
+export async function fetchAllAccountsDailyQuests(
+  accounts: SavedAccount[]
+): Promise<{ groups: AccountDailyQuestsGroup[]; refreshedTokens: Record<string, string> }> {
+  if (!accounts || accounts.length === 0) {
+    return { groups: [], refreshedTokens: {} }
+  }
+
+  const refreshedTokens: Record<string, string> = {}
+  const settled = await Promise.allSettled(
+    accounts.map(async (acc): Promise<AccountDailyQuestsGroup> => {
+      const res = await fetchDailyQuestsWithStatus(acc.accessToken, acc.accountId)
+      if (res.refreshedAccessToken) {
+        refreshedTokens[acc.accountId] = res.refreshedAccessToken
+      }
+      return {
+        accountId: acc.accountId,
+        displayName: acc.displayName,
+        quests: res.quests,
+        rerollsRemaining: res.rerollsRemaining,
+        error: res.error,
+        needsRelogin: res.needsRelogin
+      }
+    })
+  )
+
+  const groups: AccountDailyQuestsGroup[] = settled.map((item, idx) => {
+    const acc = accounts[idx]
+    if (item.status === 'fulfilled') {
+      return item.value
+    }
+    return {
+      accountId: acc.accountId,
+      displayName: acc.displayName,
+      quests: [],
+      rerollsRemaining: 0,
+      error: item.reason?.message || 'Failed to fetch account quests'
+    }
+  })
+
+  return { groups, refreshedTokens }
+}
+
 export async function rerollDailyQuest(
   questId: string,
   accessToken?: string,
@@ -372,11 +414,63 @@ export async function executeAutoReroll(
       summary.details.push({
         questName: quest.name,
         reason: evalResult.reason || 'Blacklisted',
-        success: res.success
+        success: res.success,
+        message: res.message
       })
       if (res.success) {
         summary.rerolledCount++
         // STW grants 1 reroll per day
+        break
+      }
+    }
+  }
+
+  return summary
+}
+
+export async function executeAutoRerollAllAccounts(
+  groups: AccountDailyQuestsGroup[],
+  config: AutoRerollConfig,
+  accounts: SavedAccount[]
+): Promise<AutoRerollSummary> {
+  const summary: AutoRerollSummary = {
+    success: true,
+    rerolledCount: 0,
+    details: []
+  }
+
+  // Pull latest saved accounts so auto-refreshed tokens are up to date
+  const storedAccounts = await loadAllAccounts()
+
+  for (const group of groups) {
+    if (group.error || group.rerollsRemaining <= 0 || group.quests.length === 0) {
+      continue
+    }
+
+    const accountObj =
+      storedAccounts.find((a) => a.accountId === group.accountId) ||
+      accounts.find((a) => a.accountId === group.accountId)
+    if (!accountObj) continue
+
+    let remaining = group.rerollsRemaining
+    for (const quest of group.quests) {
+      if (remaining <= 0) break
+      const evalResult = evaluateBlacklist(quest, config)
+      if (!evalResult.isBlacklisted) continue
+
+      const res = await rerollDailyQuest(quest.id, accountObj.accessToken, group.accountId)
+      summary.details.push({
+        accountName: group.displayName,
+        questName: quest.name,
+        reason: evalResult.reason || 'Blacklisted',
+        success: res.success,
+        message: res.message
+      })
+      if (res.success) {
+        summary.rerolledCount++
+        remaining--
+      } else {
+        summary.success = false
         break
       }
     }

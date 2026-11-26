@@ -1,5 +1,7 @@
 node_modules/
 .expo/
+.expo-ota-dist/
+.expo-ota-test/
 dist/
 npm-debug.*
 *.jks

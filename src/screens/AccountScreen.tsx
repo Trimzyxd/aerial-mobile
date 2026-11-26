@@ -12,6 +12,7 @@ import {
   Switch
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import * as Updates from 'expo-updates'
 import { Header } from '../components/Header'
 import {
   loginWithCode,
@@ -50,6 +51,35 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
   const [authInput, setAuthInput] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
   const [refreshingBalance, setRefreshingBalance] = useState<boolean>(false)
+  const [checkingOta, setCheckingOta] = useState<boolean>(false)
+
+  const handleCheckOtaUpdate = async () => {
+    if (!Updates.isEnabled) {
+      Alert.alert('OTA Disabled', 'Over-the-air updates require a release build with updates enabled.')
+      return
+    }
+    setCheckingOta(true)
+    try {
+      const check = await Updates.checkForUpdateAsync()
+      if (!check.isAvailable) {
+        Alert.alert('Up to Date', 'You are running the latest version of Aerial Mobile.')
+        return
+      }
+      await Updates.fetchUpdateAsync()
+      Alert.alert(
+        'Update Downloaded',
+        'A new update has been downloaded. Restart now to apply?',
+        [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Restart Now', onPress: () => Updates.reloadAsync() }
+        ]
+      )
+    } catch (err: any) {
+      Alert.alert('Update Check Failed', err?.message || 'Could not reach GitHub OTA endpoint.')
+    } finally {
+      setCheckingOta(false)
+    }
+  }
 
   const grandTotal = calculateGrandTotalVBucks(accounts)
   const activeVBucks = session?.vbucksDetail || {
@@ -510,6 +540,32 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
             </View>
           </View>
         )}
+
+        {/* Over-The-Air App Update Card (Always Visible) */}
+        <View style={styles.otaCard}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.otaTitle}>App Version 1.0.2 (GitHub OTA)</Text>
+            <Text style={styles.otaSub}>
+              {Updates.isEnabled
+                ? 'OTA Enabled · Pulls JS updates without reinstalling APK'
+                : 'Development mode · Install Release APK for OTA'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.otaBtn}
+            onPress={handleCheckOtaUpdate}
+            disabled={checkingOta}
+          >
+            {checkingOta ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <>
+                <Ionicons name="cloud-download-outline" size={14} color="#ffffff" />
+                <Text style={styles.otaBtnText}>Check Update</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </View>
   )
@@ -973,6 +1029,42 @@ const styles = StyleSheet.create({
   loginBtnText: {
     color: '#ffffff',
     fontSize: 12,
+    fontWeight: '700'
+  },
+  otaCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111723',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#1f293d',
+    gap: 10
+  },
+  otaTitle: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  otaSub: {
+    color: '#64748b',
+    fontSize: 10,
+    marginTop: 2
+  },
+  otaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1e293b',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    gap: 5
+  },
+  otaBtnText: {
+    color: '#f8fafc',
+    fontSize: 11,
     fontWeight: '700'
   }
 })

@@ -2,11 +2,18 @@
   "expo": {
     "name": "Aerial Mobile",
     "slug": "aerial-mobile",
-    "version": "1.0.1",
+    "version": "1.0.2",
+    "runtimeVersion": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 3500,
+      "url": "https://trimzyxd.github.io/aerial-mobile/ota/android.json"
+    },
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -29,7 +36,8 @@
     "plugins": [
       "expo-asset",
       "expo-secure-store",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-updates"
     ]
   }
 }

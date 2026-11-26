@@ -1,13 +1,15 @@
 import React from 'react'
-import { View, Text, StyleSheet } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { DailyQuest } from '../types'
 
 interface QuestCardProps {
   quest: DailyQuest
+  onReroll?: () => void
+  rerolling?: boolean
 }
 
-export const QuestCard: React.FC<QuestCardProps> = ({ quest }) => {
+export const QuestCard: React.FC<QuestCardProps> = ({ quest, onReroll, rerolling }) => {
   const progressRatio = Math.min(1, quest.progress / (quest.target || 1))
 
   return (
@@ -23,9 +25,25 @@ export const QuestCard: React.FC<QuestCardProps> = ({ quest }) => {
 
       <View style={styles.headerRow}>
         <Text style={styles.title}>{quest.name}</Text>
-        <View style={styles.vbucksBadge}>
-          <Ionicons name="sparkles" size={12} color="#f59e0b" />
-          <Text style={styles.vbucksText}>+{quest.vbucksReward} V-Bucks</Text>
+        <View style={styles.rightCluster}>
+          <View style={styles.vbucksBadge}>
+            <Ionicons name="sparkles" size={12} color="#f59e0b" />
+            <Text style={styles.vbucksText}>+{quest.vbucksReward} VB</Text>
+          </View>
+          {quest.canReroll && onReroll && (
+            <TouchableOpacity
+              style={styles.rerollIconBtn}
+              onPress={onReroll}
+              disabled={rerolling}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              {rerolling ? (
+                <ActivityIndicator size="small" color="#38bdf8" />
+              ) : (
+                <Ionicons name="refresh" size={14} color="#38bdf8" />
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -88,6 +106,11 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8
   },
+  rightCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
   vbucksBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -103,6 +126,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     marginLeft: 4
+  },
+  rerollIconBtn: {
+    backgroundColor: '#122036',
+    padding: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#0284c7'
   },
   description: {
     color: '#94a3b8',
