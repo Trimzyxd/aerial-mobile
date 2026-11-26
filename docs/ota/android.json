@@ -1,13 +1,13 @@
 {
-  "id": "6b1ec7e6-2785-496e-86c0-d16091c088bb",
-  "createdAt": "2026-11-26T14:39:47.311Z",
+  "id": "ae75b288-645f-4df7-a283-b3c34164aa75",
+  "createdAt": "2026-11-26T16:02:02.082Z",
   "runtimeVersion": "1.0.2",
   "launchAsset": {
-    "hash": "9rdq5PbSzvYGUh2rCrD8qDKDzgb8dyRueq9WNJSTJqE",
-    "key": "index-aad8ee657f2e01d8dd0c4ed41a4444fc",
+    "hash": "c7FzksK5DF-a-OyNVvHBHou--uwvbiyAkqIZYTxZDLg",
+    "key": "index-aacfab799679a0c024e343eb72e1ed4f",
     "contentType": "application/javascript",
     "fileExtension": ".hbc",
-    "url": "_expo/static/js/android/index-aad8ee657f2e01d8dd0c4ed41a4444fc.hbc"
+    "url": "_expo/static/js/android/index-aacfab799679a0c024e343eb72e1ed4f.hbc"
   },
   "assets": [
     {

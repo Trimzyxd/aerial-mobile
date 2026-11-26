@@ -40,6 +40,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(true)
   const [refreshing, setRefreshing] = useState<boolean>(false)
+  const [shopError, setShopError] = useState<string | null>(null)
 
   // Item details modal state (clicking card in shop)
   const [selectedDetailItem, setSelectedDetailItem] = useState<ShopItem | null>(null)
@@ -53,11 +54,26 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null)
   const [isSending, setIsSending] = useState<boolean>(false)
 
-  const loadShop = async () => {
+  const loadShop = async (showSpinner = false) => {
+    if (showSpinner) {
+      setLoading(true)
+    }
     try {
-      const data = await fetchItemShop()
-      setItems(data.items)
-      setCategories(data.categories)
+      const data = await fetchItemShop({
+        accessToken: session?.accessToken,
+        accountId: session?.accountId
+      })
+      if (data.items.length > 0) {
+        setItems(data.items)
+        setCategories(data.categories)
+        setShopError(null)
+      } else if (data.error) {
+        setShopError(data.error)
+      } else {
+        setItems([])
+        setCategories(data.categories)
+        setShopError(null)
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -66,8 +82,14 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
 
   useEffect(() => {
     loadShop()
+  }, [])
+
+  useEffect(() => {
     fetchFriendsSummary(session?.accessToken, session?.accountId).then((res) => setFriends(res.friends))
-  }, [session])
+    if (session?.accessToken && shopError && items.length === 0 && !loading) {
+      loadShop(true)
+    }
+  }, [session?.accountId, session?.accessToken])
 
   // Filter items by category and search text
   const filteredItems = useMemo(() => {
@@ -293,6 +315,10 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
           data={filteredItems}
           keyExtractor={(item) => item.id}
           numColumns={2}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={5}
+          removeClippedSubviews={false}
           renderItem={({ item }) => (
             <ShopItemCard
               item={item}
@@ -315,11 +341,25 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name="pricetags-outline" size={40} color="#64748b" />
-              <Text style={styles.emptyTitle}>No items found</Text>
-              <Text style={styles.emptySub}>
-                {searchQuery ? `No cosmetics matched "${searchQuery}"` : 'Check back after daily shop refresh.'}
+              <Ionicons
+                name={shopError && !searchQuery ? 'cloud-offline-outline' : 'pricetags-outline'}
+                size={40}
+                color={shopError && !searchQuery ? '#f87171' : '#64748b'}
+              />
+              <Text style={styles.emptyTitle}>
+                {shopError && !searchQuery ? 'Could not load item shop' : 'No items found'}
               </Text>
+              <Text style={styles.emptySub}>
+                {searchQuery
+                  ? `No cosmetics matched "${searchQuery}"`
+                  : shopError || 'Check back after daily shop refresh.'}
+              </Text>
+              {!searchQuery && (
+                <TouchableOpacity style={styles.retryBtn} onPress={() => loadShop(true)}>
+                  <Ionicons name="refresh" size={14} color="#060810" />
+                  <Text style={styles.retryBtnText}>Retry</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
         />
@@ -1272,5 +1312,20 @@ const styles = StyleSheet.create({
     fontSize: 8,
     textAlign: 'center',
     marginTop: 1
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#38bdf8'
+  },
+  retryBtnText: {
+    color: '#060810',
+    fontSize: 13,
+    fontWeight: '700'
   }
 })
