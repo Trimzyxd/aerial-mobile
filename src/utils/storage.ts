@@ -2,6 +2,23 @@ import * as SecureStore from 'expo-secure-store'
 import { Platform } from 'react-native'
 
 const memoryStore: Record<string, string> = {}
+// Android SecureStore enforces a 2048-byte limit per key; 1400 chars stays safely under even with UTF-8 multi-byte names.
+const CHUNK_SIZE = 1400
+const CHUNK_PREFIX = '__CHUNKED__:'
+
+async function deleteTrailingChunks(key: string, startIndex: number): Promise<void> {
+  let idx = startIndex
+  while (true) {
+    const chunkKey = `${key}_chk_${idx}`
+    const existing = await SecureStore.getItemAsync(chunkKey)
+    if (existing !== null) {
+      await SecureStore.deleteItemAsync(chunkKey)
+      idx++
+    } else {
+      break
+    }
+  }
+}
 
 export async function saveSecureItem(key: string, value: string): Promise<void> {
   if (Platform.OS === 'web') {
@@ -13,10 +30,24 @@ export async function saveSecureItem(key: string, value: string): Promise<void> 
     return
   }
 
+  // Always cache in memory too so an active session never loses recent writes
+  memoryStore[key] = value
+
   try {
-    await SecureStore.setItemAsync(key, value)
-  } catch {
-    memoryStore[key] = value
+    if (value.length <= CHUNK_SIZE) {
+      await SecureStore.setItemAsync(key, value)
+      await deleteTrailingChunks(key, 0)
+    } else {
+      const numChunks = Math.ceil(value.length / CHUNK_SIZE)
+      for (let i = 0; i < numChunks; i++) {
+        const chunk = value.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+        await SecureStore.setItemAsync(`${key}_chk_${i}`, chunk)
+      }
+      await SecureStore.setItemAsync(key, `${CHUNK_PREFIX}${numChunks}`)
+      await deleteTrailingChunks(key, numChunks)
+    }
+  } catch (err) {
+    console.warn(`SecureStore save failed for key "${key}"`, err)
   }
 }
 
@@ -29,24 +60,57 @@ export async function getSecureItem(key: string): Promise<string | null> {
   }
 
   try {
-    return await SecureStore.getItemAsync(key)
+    const raw = await SecureStore.getItemAsync(key)
+    if (!raw) {
+      return memoryStore[key] || null
+    }
+
+    if (raw.startsWith(CHUNK_PREFIX)) {
+      const numChunks = parseInt(raw.replace(CHUNK_PREFIX, ''), 10)
+      if (isNaN(numChunks) || numChunks <= 0) {
+        return memoryStore[key] || null
+      }
+
+      let reconstructed = ''
+      for (let i = 0; i < numChunks; i++) {
+        const chunk = await SecureStore.getItemAsync(`${key}_chk_${i}`)
+        if (chunk === null) {
+          return memoryStore[key] || null
+        }
+        reconstructed += chunk
+      }
+      return reconstructed
+    }
+
+    return raw
   } catch {
     return memoryStore[key] || null
   }
 }
 
 export async function deleteSecureItem(key: string): Promise<void> {
+  delete memoryStore[key]
+
   if (Platform.OS === 'web') {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(key)
     }
-    delete memoryStore[key]
     return
   }
 
   try {
+    const raw = await SecureStore.getItemAsync(key)
+    if (raw && raw.startsWith(CHUNK_PREFIX)) {
+      const numChunks = parseInt(raw.replace(CHUNK_PREFIX, ''), 10)
+      if (!isNaN(numChunks) && numChunks > 0) {
+        for (let i = 0; i < numChunks; i++) {
+          await SecureStore.deleteItemAsync(`${key}_chk_${i}`)
+        }
+      }
+    }
     await SecureStore.deleteItemAsync(key)
+    await deleteTrailingChunks(key, 0)
   } catch {
-    delete memoryStore[key]
+    // Ignore cleanup errors
   }
 }

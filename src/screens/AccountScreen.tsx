@@ -18,6 +18,7 @@ import {
   logoutSession,
   switchActiveAccount,
   removeAccount,
+  reorderAccounts,
   calculateGrandTotalVBucks,
   fetchAccountVbucks,
   loadAllAccounts,
@@ -152,6 +153,11 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
         }
       }
     ])
+  }
+
+  const handleMoveAccount = async (fromIndex: number, toIndex: number) => {
+    const updated = await reorderAccounts(fromIndex, toIndex, accounts)
+    onAccountsChange(updated)
   }
 
   const handleLogout = async () => {
@@ -370,36 +376,90 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
               </TouchableOpacity>
             </View>
 
-            {/* Multi-Account Switcher */}
-            <Text style={styles.sectionHeader}>Saved Accounts ({accounts.length})</Text>
+            {/* Multi-Account Switcher & Reordering */}
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionHeader}>Saved Accounts ({accounts.length})</Text>
+              {accounts.length > 1 && (
+                <Text style={styles.reorderHint}>Use arrows to reorder list</Text>
+              )}
+            </View>
 
-            {accounts.map((acc) => (
-              <TouchableOpacity
+            {accounts.map((acc, index) => (
+              <View
                 key={acc.accountId}
                 style={[styles.accountItem, acc.isActive ? styles.accountItemActive : null]}
-                onPress={() => !acc.isActive && handleSwitch(acc.accountId)}
-                activeOpacity={0.7}
               >
-                <View style={styles.accountItemLeft}>
+                <TouchableOpacity
+                  style={styles.accountItemLeft}
+                  onPress={() => !acc.isActive && handleSwitch(acc.accountId)}
+                  activeOpacity={0.7}
+                >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.orderIndex}>#{index + 1}</Text>
                     <Text style={styles.accountItemName}>{acc.displayName}</Text>
-                    {acc.isActive && (
+                    {acc.isActive ? (
                       <View style={styles.itemActivePill}>
                         <Text style={styles.itemActivePillText}>Active</Text>
                       </View>
-                    )}
+                    ) : null}
                   </View>
                   <Text style={styles.accountItemVBucks}>
                     {(acc.vbucks?.total || 0).toLocaleString()} VB · Earned: {(acc.vbucks?.complimentary || 0).toLocaleString()}
                   </Text>
-                </View>
+                </TouchableOpacity>
 
                 <View style={styles.accountItemRight}>
-                  {acc.isActive ? (
-                    <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
-                  ) : (
-                    <Ionicons name="radio-button-off" size={18} color="#64748b" />
+                  {accounts.length > 1 && (
+                    <View style={styles.reorderControls}>
+                      {index > 0 && (
+                        <TouchableOpacity
+                          style={styles.reorderBtn}
+                          onPress={() => handleMoveAccount(index, 0)}
+                          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                        >
+                          <Ionicons name="arrow-up-circle-outline" size={17} color="#38bdf8" />
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        style={[styles.reorderBtn, index === 0 ? styles.reorderBtnDisabled : null]}
+                        onPress={() => handleMoveAccount(index, index - 1)}
+                        disabled={index === 0}
+                        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                      >
+                        <Ionicons
+                          name="chevron-up"
+                          size={17}
+                          color={index === 0 ? '#334155' : '#cbd5e1'}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.reorderBtn,
+                          index === accounts.length - 1 ? styles.reorderBtnDisabled : null
+                        ]}
+                        onPress={() => handleMoveAccount(index, index + 1)}
+                        disabled={index === accounts.length - 1}
+                        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                      >
+                        <Ionicons
+                          name="chevron-down"
+                          size={17}
+                          color={index === accounts.length - 1 ? '#334155' : '#cbd5e1'}
+                        />
+                      </TouchableOpacity>
+                    </View>
                   )}
+
+                  <TouchableOpacity
+                    onPress={() => !acc.isActive && handleSwitch(acc.accountId)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    {acc.isActive ? (
+                      <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
+                    ) : (
+                      <Ionicons name="radio-button-off" size={18} color="#64748b" />
+                    )}
+                  </TouchableOpacity>
 
                   {accounts.length > 1 && (
                     <TouchableOpacity
@@ -411,7 +471,7 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
                     </TouchableOpacity>
                   )}
                 </View>
-              </TouchableOpacity>
+              </View>
             ))}
 
             {/* Add Another Account Section */}
@@ -787,13 +847,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600'
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8
+  },
   sectionHeader: {
     color: '#94a3b8',
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 8
+    letterSpacing: 1
+  },
+  reorderHint: {
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: '600'
+  },
+  orderIndex: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  reorderControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#101520',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#1f2a3e',
+    paddingHorizontal: 3,
+    paddingVertical: 2,
+    gap: 2
+  },
+  reorderBtn: {
+    padding: 3
+  },
+  reorderBtnDisabled: {
+    opacity: 0.45
   },
   accountItem: {
     flexDirection: 'row',

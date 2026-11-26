@@ -19,6 +19,7 @@ interface VBucksVaultModalProps {
   onClose: () => void
   onSwitchAccount: (accountId: string) => void
   onRemoveAccount: (accountId: string) => void
+  onReorderAccount?: (fromIndex: number, toIndex: number) => void
   onAddAccountPress: () => void
   showGrandTotalInHeader: boolean
   onToggleHeaderTotal: (val: boolean) => void
@@ -30,6 +31,7 @@ export const VBucksVaultModal: React.FC<VBucksVaultModalProps> = ({
   onClose,
   onSwitchAccount,
   onRemoveAccount,
+  onReorderAccount,
   onAddAccountPress,
   showGrandTotalInHeader,
   onToggleHeaderTotal
@@ -120,7 +122,7 @@ export const VBucksVaultModal: React.FC<VBucksVaultModalProps> = ({
                 <Text style={styles.emptyAccountSub}>Tap below to connect your Epic Games account.</Text>
               </View>
             ) : (
-              accounts.map((acc) => (
+              accounts.map((acc, index) => (
                 <TouchableOpacity
                   key={acc.accountId}
                   style={[styles.accountCard, acc.isActive ? styles.accountCardActive : null]}
@@ -130,6 +132,7 @@ export const VBucksVaultModal: React.FC<VBucksVaultModalProps> = ({
                   <View style={styles.accountTopRow}>
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={{ color: '#64748b', fontSize: 11, fontWeight: '700' }}>#{index + 1}</Text>
                         <Text style={styles.accountName}>{acc.displayName}</Text>
                         {acc.isActive ? (
                           <View style={styles.activePill}>
@@ -165,18 +168,63 @@ export const VBucksVaultModal: React.FC<VBucksVaultModalProps> = ({
                       )}
                     </View>
 
-                    {accounts.length > 1 && (
-                      <TouchableOpacity
-                        style={styles.trashBtn}
-                        onPress={(e) => {
-                          e.stopPropagation()
-                          confirmRemove(acc)
-                        }}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Ionicons name="trash-outline" size={15} color="#ef4444" />
-                      </TouchableOpacity>
-                    )}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      {accounts.length > 1 && onReorderAccount && (
+                        <>
+                          {index > 0 && (
+                            <TouchableOpacity
+                              style={styles.trashBtn}
+                              onPress={(e) => {
+                                e.stopPropagation()
+                                onReorderAccount(index, 0)
+                              }}
+                              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                            >
+                              <Ionicons name="arrow-up-circle-outline" size={16} color="#38bdf8" />
+                            </TouchableOpacity>
+                          )}
+                          <TouchableOpacity
+                            style={styles.trashBtn}
+                            onPress={(e) => {
+                              e.stopPropagation()
+                              onReorderAccount(index, index - 1)
+                            }}
+                            disabled={index === 0}
+                            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                          >
+                            <Ionicons name="chevron-up" size={16} color={index === 0 ? '#334155' : '#cbd5e1'} />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.trashBtn}
+                            onPress={(e) => {
+                              e.stopPropagation()
+                              onReorderAccount(index, index + 1)
+                            }}
+                            disabled={index === accounts.length - 1}
+                            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                          >
+                            <Ionicons
+                              name="chevron-down"
+                              size={16}
+                              color={index === accounts.length - 1 ? '#334155' : '#cbd5e1'}
+                            />
+                          </TouchableOpacity>
+                        </>
+                      )}
+
+                      {accounts.length > 1 && (
+                        <TouchableOpacity
+                          style={styles.trashBtn}
+                          onPress={(e) => {
+                            e.stopPropagation()
+                            confirmRemove(acc)
+                          }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
                 </TouchableOpacity>
               ))

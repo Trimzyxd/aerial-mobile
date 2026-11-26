@@ -15,7 +15,8 @@ import {
   loadSavedSession,
   loadAllAccounts,
   switchActiveAccount,
-  removeAccount
+  removeAccount,
+  reorderAccounts
 } from './src/api/epic-auth'
 import { getSecureItem, saveSecureItem } from './src/utils/storage'
 import { EpicAccountSession, SavedAccount } from './src/types'
@@ -55,7 +56,7 @@ export default function App() {
         displayName: switched.displayName,
         accessToken: switched.accessToken,
         expiresAt: switched.expiresAt,
-        vbucksBalance: switched.vbucks.total,
+        vbucksBalance: switched.vbucks?.total || 0,
         vbucksDetail: switched.vbucks
       })
       const updated = accounts.map((a) => ({
@@ -64,6 +65,16 @@ export default function App() {
       }))
       setAccounts(updated)
     }
+  }
+
+  const handleReorderAccounts = async (fromIndex: number, toIndex: number) => {
+    const updated = await reorderAccounts(fromIndex, toIndex, accounts)
+    setAccounts(updated)
+  }
+
+  const handleSessionTokenRefreshed = (accountId: string, accessToken: string) => {
+    setSession((prev) => (prev && prev.accountId === accountId ? { ...prev, accessToken } : prev))
+    setAccounts((prev) => prev.map((a) => (a.accountId === accountId ? { ...a, accessToken } : a)))
   }
 
   const handleRemoveAccount = async (accountId: string) => {
@@ -76,7 +87,7 @@ export default function App() {
         displayName: active.displayName,
         accessToken: active.accessToken,
         expiresAt: active.expiresAt,
-        vbucksBalance: active.vbucks.total,
+        vbucksBalance: active.vbucks?.total || 0,
         vbucksDetail: active.vbucks
       })
     } else {
@@ -141,6 +152,7 @@ export default function App() {
                   accounts={accounts}
                   showGrandTotal={showGrandTotal}
                   onOpenVault={() => setVaultModalVisible(true)}
+                  onSessionTokenRefreshed={handleSessionTokenRefreshed}
                 />
               )}
             </Tab.Screen>
@@ -187,6 +199,7 @@ export default function App() {
           onClose={() => setVaultModalVisible(false)}
           onSwitchAccount={handleSwitchAccount}
           onRemoveAccount={handleRemoveAccount}
+          onReorderAccount={handleReorderAccounts}
           onAddAccountPress={() => {
             setVaultModalVisible(false)
           }}

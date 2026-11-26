@@ -109,13 +109,14 @@ export async function createDeviceAuth(
       method: 'POST',
       headers: {
         'Authorization': `bearer ${accessToken}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
       },
       body: JSON.stringify({})
     })
 
     if (!res.ok) {
-      console.warn('Failed to create device auth credentials')
+      console.warn(`Failed to create device auth credentials (HTTP ${res.status})`)
       return null
     }
 
@@ -132,48 +133,139 @@ export async function createDeviceAuth(
 
 /**
  * Refreshes an account's access token using its saved Device Auth credentials.
+ * Tries Android client, then iOS client, then Switch client.
  */
 export async function refreshAccountWithDeviceAuth(account: SavedAccount): Promise<SavedAccount | null> {
   if (!account.deviceId || !account.secret || !account.accountId) {
     return null
   }
 
-  try {
-    const res = await fetch('https://account-public-service-prod.ol.epicgames.com/account/api/oauth/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${ANDROID_AUTH}`
-      },
-      body: new URLSearchParams({
-        grant_type: 'device_auth',
-        account_id: account.accountId,
-        device_id: account.deviceId,
-        secret: account.secret
-      }).toString()
-    })
+  const clients = [ANDROID_AUTH, IOS_AUTH, SWITCH_AUTH]
+  for (const clientAuth of clients) {
+    try {
+      const res = await fetch('https://account-public-service-prod.ol.epicgames.com/account/api/oauth/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Basic ${clientAuth}`,
+          'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
+        },
+        body: new URLSearchParams({
+          grant_type: 'device_auth',
+          account_id: account.accountId,
+          device_id: account.deviceId,
+          secret: account.secret
+        }).toString()
+      })
 
-    if (!res.ok) {
-      return null
+      if (res.ok) {
+        const data = await res.json()
+        const newAccessToken = data.access_token
+        const newExpiresAt = new Date(Date.now() + (data.expires_in || 28800) * 1000).toISOString()
+        const vbucks = await fetchAccountVbucks(newAccessToken, account.accountId)
+
+        const updatedAccount: SavedAccount = {
+          ...account,
+          displayName: data.displayName || account.displayName,
+          accessToken: newAccessToken,
+          expiresAt: newExpiresAt,
+          vbucks: vbucks || account.vbucks || { total: 0, complimentary: 0, purchased: 0 }
+        }
+
+        return updatedAccount
+      }
+    } catch (err) {
+      console.warn('Failed device auth attempt with client', err)
     }
-
-    const data = await res.json()
-    const newAccessToken = data.access_token
-    const newExpiresAt = new Date(Date.now() + (data.expires_in || 28800) * 1000).toISOString()
-    const vbucks = await fetchAccountVbucks(newAccessToken, account.accountId)
-
-    const updatedAccount: SavedAccount = {
-      ...account,
-      accessToken: newAccessToken,
-      expiresAt: newExpiresAt,
-      vbucks
-    }
-
-    return updatedAccount
-  } catch (err) {
-    console.warn('Failed to refresh account with device auth', err)
-    return null
   }
+
+  return null
+}
+
+function isTokenExpiredOrNear(expiresAt?: string, accessToken?: string): boolean {
+  if (!accessToken || !expiresAt) return true
+  const ms = new Date(expiresAt).getTime()
+  return isNaN(ms) || ms < Date.now() + 300000
+}
+
+/**
+ * Forces a token refresh for a specific accountId using its stored Device Auth
+ * and persists the fresh token across both saved accounts list and active session.
+ */
+export async function forceRefreshAccountToken(accountId: string): Promise<SavedAccount | null> {
+  const accounts = await loadAllAccounts()
+  let target = accounts.find((a) => a.accountId === accountId) || null
+
+  // Fallback to ACTIVE_ACCOUNT_KEY if deviceId/secret only lived there
+  let activeSession: EpicAccountSession | null = null
+  try {
+    const rawSession = await getSecureItem(ACTIVE_ACCOUNT_KEY)
+    if (rawSession) {
+      activeSession = JSON.parse(rawSession) as EpicAccountSession
+    }
+  } catch {
+    activeSession = null
+  }
+
+  if (!target && activeSession?.accountId === accountId) {
+    target = {
+      accountId: activeSession.accountId,
+      displayName: activeSession.displayName,
+      accessToken: activeSession.accessToken,
+      expiresAt: activeSession.expiresAt,
+      deviceId: activeSession.deviceId,
+      secret: activeSession.secret,
+      vbucks: activeSession.vbucksDetail || { total: activeSession.vbucksBalance || 0, complimentary: 0, purchased: 0 },
+      isActive: true
+    }
+  }
+
+  if (!target) return null
+  if ((!target.deviceId || !target.secret) && activeSession?.accountId === accountId) {
+    target = {
+      ...target,
+      deviceId: target.deviceId || activeSession.deviceId,
+      secret: target.secret || activeSession.secret
+    }
+  }
+
+  const refreshed = await refreshAccountWithDeviceAuth(target)
+  if (!refreshed) return null
+
+  const updatedAccounts = accounts.some((a) => a.accountId === accountId)
+    ? accounts.map((a) => (a.accountId === accountId ? { ...refreshed, isActive: a.isActive } : a))
+    : [{ ...refreshed, isActive: true }, ...accounts]
+
+  await saveAllAccounts(updatedAccounts)
+
+  if (refreshed.isActive || activeSession?.accountId === accountId) {
+    const vbucks = refreshed.vbucks || { total: 0, complimentary: 0, purchased: 0 }
+    await saveSecureItem(
+      ACTIVE_ACCOUNT_KEY,
+      JSON.stringify({
+        accountId: refreshed.accountId,
+        displayName: refreshed.displayName,
+        accessToken: refreshed.accessToken,
+        expiresAt: refreshed.expiresAt,
+        deviceId: refreshed.deviceId,
+        secret: refreshed.secret,
+        vbucksBalance: vbucks.total,
+        vbucksDetail: vbucks
+      } as EpicAccountSession)
+    )
+  }
+
+  return refreshed
+}
+
+export async function ensureValidToken(account: SavedAccount): Promise<{ accessToken: string; account: SavedAccount }> {
+  if (isTokenExpiredOrNear(account.expiresAt, account.accessToken) && account.deviceId && account.secret) {
+    const refreshed = await forceRefreshAccountToken(account.accountId)
+    if (refreshed) {
+      return { accessToken: refreshed.accessToken, account: refreshed }
+    }
+  }
+  return { accessToken: account.accessToken, account }
 }
 
 export async function loadAllAccounts(): Promise<SavedAccount[]> {
@@ -203,9 +295,10 @@ export async function addOrUpdateAccount(
   vbucks: VBucksDetail
 ): Promise<SavedAccount[]> {
   const current = await loadAllAccounts()
-  const filtered = current.filter(
-    (a) => a.accountId !== session.accountId && !a.accountId.startsWith('demo-')
+  const cleanCurrent = current.filter(
+    (a) => a.accountId && !a.accountId.startsWith('demo-') && a.displayName !== 'Commander Main'
   )
+  const existingIndex = cleanCurrent.findIndex((a) => a.accountId === session.accountId)
 
   const newAccount: SavedAccount = {
     accountId: session.accountId,
@@ -218,9 +311,18 @@ export async function addOrUpdateAccount(
     isActive: true
   }
 
-  // Deactivate other accounts
-  const updated = filtered.map((a) => ({ ...a, isActive: false }))
-  updated.unshift(newAccount)
+  // Deactivate other accounts while preserving existing account order
+  const updated = cleanCurrent.map((a) => ({ ...a, isActive: false }))
+  if (existingIndex !== -1) {
+    updated[existingIndex] = {
+      ...updated[existingIndex],
+      ...newAccount,
+      deviceId: newAccount.deviceId || updated[existingIndex].deviceId,
+      secret: newAccount.secret || updated[existingIndex].secret
+    }
+  } else {
+    updated.unshift(newAccount)
+  }
 
   await saveAllAccounts(updated)
   await saveSecureItem(
@@ -235,20 +337,42 @@ export async function addOrUpdateAccount(
   return updated
 }
 
+export async function reorderAccounts(
+  fromIndex: number,
+  toIndex: number,
+  currentAccounts?: SavedAccount[]
+): Promise<SavedAccount[]> {
+  const list = [...(currentAccounts || (await loadAllAccounts()))]
+  if (
+    fromIndex < 0 ||
+    fromIndex >= list.length ||
+    toIndex < 0 ||
+    toIndex >= list.length ||
+    fromIndex === toIndex
+  ) {
+    return list
+  }
+
+  const [moved] = list.splice(fromIndex, 1)
+  list.splice(toIndex, 0, moved)
+  await saveAllAccounts(list)
+  return list
+}
+
 export async function switchActiveAccount(accountId: string): Promise<SavedAccount | null> {
   const accounts = await loadAllAccounts()
   let selected = accounts.find((a) => a.accountId === accountId) || null
   if (!selected) return null
 
-  // Check if token expired or about to expire (within 2 minutes)
-  const isExpired = new Date(selected.expiresAt).getTime() < Date.now() + 120000
-  if (isExpired && selected.deviceId && selected.secret) {
+  // Ensure fresh token when switching
+  if (selected.deviceId && selected.secret && isTokenExpiredOrNear(selected.expiresAt, selected.accessToken)) {
     const refreshed = await refreshAccountWithDeviceAuth(selected)
     if (refreshed) {
       selected = refreshed
     }
   }
 
+  const vbucks = selected.vbucks || { total: 0, complimentary: 0, purchased: 0 }
   const updated = accounts.map((acc) => ({
     ...acc,
     ...(acc.accountId === accountId ? selected : {}),
@@ -264,8 +388,8 @@ export async function switchActiveAccount(accountId: string): Promise<SavedAccou
     expiresAt: selected.expiresAt,
     deviceId: selected.deviceId,
     secret: selected.secret,
-    vbucksBalance: selected.vbucks.total,
-    vbucksDetail: selected.vbucks
+    vbucksBalance: vbucks.total,
+    vbucksDetail: vbucks
   }
 
   await saveSecureItem(ACTIVE_ACCOUNT_KEY, JSON.stringify(session))
@@ -425,58 +549,62 @@ export async function loginWithExchangeCode(code: string): Promise<EpicAccountSe
 
 export async function loadSavedSession(): Promise<EpicAccountSession | null> {
   try {
+    const accounts = await loadAllAccounts()
     const raw = await getSecureItem(ACTIVE_ACCOUNT_KEY)
-    if (!raw) {
-      // Check if accounts exist
-      const accounts = await loadAllAccounts()
-      if (accounts.length > 0) {
-        const active = accounts.find((a) => a.isActive) || accounts[0]
-        return {
-          accountId: active.accountId,
-          displayName: active.displayName,
-          accessToken: active.accessToken,
-          expiresAt: active.expiresAt,
-          deviceId: active.deviceId,
-          secret: active.secret,
-          vbucksBalance: active.vbucks?.total || 0,
-          vbucksDetail: active.vbucks
-        }
+
+    let session: EpicAccountSession | null = null
+    if (raw) {
+      const parsed = JSON.parse(raw) as EpicAccountSession
+      if (parsed.accountId && parsed.accountId.startsWith('demo-')) {
+        await deleteSecureItem(ACTIVE_ACCOUNT_KEY)
+      } else {
+        // Prefer latest saved account data if it exists (keeps credentials/order synced)
+        const matchingAcc = accounts.find((a) => a.accountId === parsed.accountId)
+        session = matchingAcc
+          ? {
+              accountId: matchingAcc.accountId,
+              displayName: matchingAcc.displayName,
+              accessToken: matchingAcc.accessToken,
+              expiresAt: matchingAcc.expiresAt,
+              deviceId: matchingAcc.deviceId || parsed.deviceId,
+              secret: matchingAcc.secret || parsed.secret,
+              vbucksBalance: matchingAcc.vbucks?.total ?? parsed.vbucksBalance ?? 0,
+              vbucksDetail: matchingAcc.vbucks || parsed.vbucksDetail
+            }
+          : parsed
       }
-      return null
     }
 
-    const session = JSON.parse(raw) as EpicAccountSession
-    if (session.accountId && session.accountId.startsWith('demo-')) {
-      await deleteSecureItem(ACTIVE_ACCOUNT_KEY)
-      return null
+    if (!session && accounts.length > 0) {
+      const active = accounts.find((a) => a.isActive) || accounts[0]
+      session = {
+        accountId: active.accountId,
+        displayName: active.displayName,
+        accessToken: active.accessToken,
+        expiresAt: active.expiresAt,
+        deviceId: active.deviceId,
+        secret: active.secret,
+        vbucksBalance: active.vbucks?.total || 0,
+        vbucksDetail: active.vbucks
+      }
     }
 
-    // Check if token expired
-    const isExpired = new Date(session.expiresAt).getTime() < Date.now() + 120000
-    if (isExpired && session.deviceId && session.secret) {
-      const refreshed = await refreshAccountWithDeviceAuth({
-        accountId: session.accountId,
-        displayName: session.displayName,
-        accessToken: session.accessToken,
-        expiresAt: session.expiresAt,
-        deviceId: session.deviceId,
-        secret: session.secret,
-        vbucks: session.vbucksDetail || { total: 0, complimentary: 0, purchased: 0 },
-        isActive: true
-      })
+    if (!session) return null
+
+    if (isTokenExpiredOrNear(session.expiresAt, session.accessToken) && session.deviceId && session.secret) {
+      const refreshed = await forceRefreshAccountToken(session.accountId)
       if (refreshed) {
-        const refreshedSession: EpicAccountSession = {
+        const vbucks = refreshed.vbucks || { total: 0, complimentary: 0, purchased: 0 }
+        return {
           accountId: refreshed.accountId,
           displayName: refreshed.displayName,
           accessToken: refreshed.accessToken,
           expiresAt: refreshed.expiresAt,
           deviceId: refreshed.deviceId,
           secret: refreshed.secret,
-          vbucksBalance: refreshed.vbucks.total,
-          vbucksDetail: refreshed.vbucks
+          vbucksBalance: vbucks.total,
+          vbucksDetail: vbucks
         }
-        await saveSecureItem(ACTIVE_ACCOUNT_KEY, JSON.stringify(refreshedSession))
-        return refreshedSession
       }
     }
 

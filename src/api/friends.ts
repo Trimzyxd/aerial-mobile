@@ -1,4 +1,5 @@
 import { Friend, FriendRequest, SavedAccount } from '../types'
+import { forceRefreshAccountToken } from './epic-auth'
 
 export interface BulkFriendAddResult {
   targetDisplayName: string
@@ -31,12 +32,21 @@ export async function fetchFriendsSummary(accessToken?: string, accountId?: stri
 
   try {
     const url = `https://friends-public-service-prod.ol.epicgames.com/friends/api/v1/${accountId}/summary`
-    const res = await fetch(url, {
-      headers: {
-        'Authorization': `bearer ${accessToken}`,
-        'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
+    const doFetch = (token: string) =>
+      fetch(url, {
+        headers: {
+          'Authorization': `bearer ${token}`,
+          'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
+        }
+      })
+
+    let res = await doFetch(accessToken)
+    if (res.status === 401 || res.status === 403) {
+      const refreshed = await forceRefreshAccountToken(accountId)
+      if (refreshed) {
+        res = await doFetch(refreshed.accessToken)
       }
-    })
+    }
 
     if (!res.ok) {
       return { friends: [], requests: [] }
@@ -100,7 +110,7 @@ export async function lookupUser(
   }
 
   if (!accessToken) {
-    return { id: `acc-${query.toLowerCase().replace(/\s+/g, '_')}`, displayName: query }
+    return null
   }
 
   try {
@@ -130,18 +140,27 @@ export async function sendFriendRequest(
   accountId?: string
 ): Promise<{ success: boolean; message?: string }> {
   if (!accessToken || !accountId) {
-    return { success: true }
+    return { success: false, message: 'Not authenticated' }
   }
 
-  try {
-    const url = `https://friends-public-service-prod.ol.epicgames.com/friends/api/v1/${accountId}/friends/${targetId}`
-    const res = await fetch(url, {
+  const doPost = (token: string) =>
+    fetch(`https://friends-public-service-prod.ol.epicgames.com/friends/api/v1/${accountId}/friends/${targetId}`, {
       method: 'POST',
       headers: {
-        Authorization: `bearer ${accessToken}`,
-        'Content-Type': 'application/json'
+        Authorization: `bearer ${token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
       }
     })
+
+  try {
+    let res = await doPost(accessToken)
+    if (res.status === 401 || res.status === 403) {
+      const refreshed = await forceRefreshAccountToken(accountId)
+      if (refreshed) {
+        res = await doPost(refreshed.accessToken)
+      }
+    }
 
     if (res.ok) {
       return { success: true }
@@ -155,13 +174,24 @@ export async function sendFriendRequest(
 }
 
 export async function acceptFriendRequest(targetId: string, accessToken?: string, accountId?: string): Promise<boolean> {
-  if (!accessToken || !accountId) return true
-  try {
-    const url = `https://friends-public-service-prod.ol.epicgames.com/friends/api/v1/${accountId}/incoming/${targetId}`
-    const res = await fetch(url, {
+  if (!accessToken || !accountId) return false
+  const doPost = (token: string) =>
+    fetch(`https://friends-public-service-prod.ol.epicgames.com/friends/api/v1/${accountId}/incoming/${targetId}`, {
       method: 'POST',
-      headers: { 'Authorization': `bearer ${accessToken}` }
+      headers: {
+        Authorization: `bearer ${token}`,
+        'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
+      }
     })
+
+  try {
+    let res = await doPost(accessToken)
+    if (res.status === 401 || res.status === 403) {
+      const refreshed = await forceRefreshAccountToken(accountId)
+      if (refreshed) {
+        res = await doPost(refreshed.accessToken)
+      }
+    }
     return res.ok
   } catch {
     return false
@@ -169,13 +199,24 @@ export async function acceptFriendRequest(targetId: string, accessToken?: string
 }
 
 export async function rejectFriendRequest(targetId: string, accessToken?: string, accountId?: string): Promise<boolean> {
-  if (!accessToken || !accountId) return true
-  try {
-    const url = `https://friends-public-service-prod.ol.epicgames.com/friends/api/v1/${accountId}/incoming/${targetId}`
-    const res = await fetch(url, {
+  if (!accessToken || !accountId) return false
+  const doDel = (token: string) =>
+    fetch(`https://friends-public-service-prod.ol.epicgames.com/friends/api/v1/${accountId}/incoming/${targetId}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `bearer ${accessToken}` }
+      headers: {
+        Authorization: `bearer ${token}`,
+        'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
+      }
     })
+
+  try {
+    let res = await doDel(accessToken)
+    if (res.status === 401 || res.status === 403) {
+      const refreshed = await forceRefreshAccountToken(accountId)
+      if (refreshed) {
+        res = await doDel(refreshed.accessToken)
+      }
+    }
     return res.ok
   } catch {
     return false
@@ -183,13 +224,24 @@ export async function rejectFriendRequest(targetId: string, accessToken?: string
 }
 
 export async function removeFriend(targetId: string, accessToken?: string, accountId?: string): Promise<boolean> {
-  if (!accessToken || !accountId) return true
-  try {
-    const url = `https://friends-public-service-prod.ol.epicgames.com/friends/api/v1/${accountId}/friends/${targetId}`
-    const res = await fetch(url, {
+  if (!accessToken || !accountId) return false
+  const doDel = (token: string) =>
+    fetch(`https://friends-public-service-prod.ol.epicgames.com/friends/api/v1/${accountId}/friends/${targetId}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `bearer ${accessToken}` }
+      headers: {
+        Authorization: `bearer ${token}`,
+        'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
+      }
     })
+
+  try {
+    let res = await doDel(accessToken)
+    if (res.status === 401 || res.status === 403) {
+      const refreshed = await forceRefreshAccountToken(accountId)
+      if (refreshed) {
+        res = await doDel(refreshed.accessToken)
+      }
+    }
     return res.ok
   } catch {
     return false

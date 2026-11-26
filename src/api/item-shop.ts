@@ -1,4 +1,5 @@
 import { ShopItem, GiftBoxTemplate, GrantedItem } from '../types'
+import { forceRefreshAccountToken } from './epic-auth'
 
 export const GIFT_BOX_TEMPLATES: GiftBoxTemplate[] = [
   { id: 'GiftBox:gb_default', name: 'Standard', previewColor: '#3a3f58' }
@@ -193,21 +194,31 @@ export async function purchaseItem({
 
   try {
     const url = `https://fngw-mcp-gc-livefn.ol.epicgames.com/fortnite/api/game/v2/profile/${accountId}/client/PurchaseCatalogEntry?profileId=common_core`
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        offerId,
-        purchaseQuantity: 1,
-        currency: 'MtxCurrency',
-        currencySubType: '',
-        expectedTotalPrice: price,
-        gameContext: 'FrontEnd.Store'
+    const doPost = (token: string) =>
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
+        },
+        body: JSON.stringify({
+          offerId,
+          purchaseQuantity: 1,
+          currency: 'MtxCurrency',
+          currencySubType: '',
+          expectedTotalPrice: price,
+          gameContext: 'FrontEnd.Store'
+        })
       })
-    })
+
+    let res = await doPost(accessToken)
+    if (res.status === 401 || res.status === 403) {
+      const refreshed = await forceRefreshAccountToken(accountId)
+      if (refreshed) {
+        res = await doPost(refreshed.accessToken)
+      }
+    }
 
     if (res.ok) {
       return { success: true, message: 'Item purchased successfully!' }
@@ -281,25 +292,34 @@ export async function sendGift({
     const url = `https://fngw-mcp-gc-livefn.ol.epicgames.com/fortnite/api/game/v2/profile/${accountId}/client/GiftCatalogEntry?profileId=common_core`
 
     // Matches desktop Aerial Launcher exact Fortnite MCP request payload and headers
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
-      },
-      body: JSON.stringify({
-        offerId,
-        receiverAccountIds: [receiverId],
-        giftWrapTemplateId: '',
-        personalMessage: '',
-        purchasePrice: price,
-        currency: 'MtxCurrency',
-        currencySubType: '',
-        expectedTotalPrice: price,
-        gameContext: 'FrontEnd.Store'
+    const doGift = (token: string) =>
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
+        },
+        body: JSON.stringify({
+          offerId,
+          receiverAccountIds: [receiverId],
+          giftWrapTemplateId: '',
+          personalMessage: '',
+          purchasePrice: price,
+          currency: 'MtxCurrency',
+          currencySubType: '',
+          expectedTotalPrice: price,
+          gameContext: 'FrontEnd.Store'
+        })
       })
-    })
+
+    let res = await doGift(accessToken)
+    if (res.status === 401 || res.status === 403) {
+      const refreshed = await forceRefreshAccountToken(accountId)
+      if (refreshed) {
+        res = await doGift(refreshed.accessToken)
+      }
+    }
 
     if (res.ok) {
       return { success: true, message: `Gift delivered successfully to ${recipientName}!` }

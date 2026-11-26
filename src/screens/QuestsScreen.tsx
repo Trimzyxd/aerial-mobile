@@ -14,7 +14,7 @@ import { Header } from '../components/Header'
 import { QuestCard } from '../components/QuestCard'
 import { BlacklistModal } from '../components/BlacklistModal'
 import {
-  fetchDailyQuests,
+  fetchDailyQuestsWithStatus,
   loadAutoRerollConfig,
   saveAutoRerollConfig,
   executeAutoReroll,
@@ -28,15 +28,19 @@ interface QuestsScreenProps {
   accounts?: SavedAccount[]
   showGrandTotal?: boolean
   onOpenVault?: () => void
+  onSessionTokenRefreshed?: (accountId: string, accessToken: string) => void
 }
 
 export const QuestsScreen: React.FC<QuestsScreenProps> = ({
   session,
   accounts,
   showGrandTotal,
-  onOpenVault
+  onOpenVault,
+  onSessionTokenRefreshed
 }) => {
   const [quests, setQuests] = useState<DailyQuest[]>([])
+  const [rerollsRemaining, setRerollsRemaining] = useState<number>(0)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [refreshing, setRefreshing] = useState<boolean>(false)
   const [autoRerollConfig, setAutoRerollConfig] = useState<AutoRerollConfig>(DEFAULT_AUTOREROLL_CONFIG)
@@ -44,11 +48,17 @@ export const QuestsScreen: React.FC<QuestsScreenProps> = ({
   const [isAutoRerolling, setIsAutoRerolling] = useState<boolean>(false)
 
   const loadQuests = async () => {
+    setFetchError(null)
     try {
       const cfg = await loadAutoRerollConfig()
       setAutoRerollConfig(cfg)
-      const data = await fetchDailyQuests(session?.accessToken, session?.accountId)
-      setQuests(data)
+      const res = await fetchDailyQuestsWithStatus(session?.accessToken, session?.accountId)
+      setQuests(res.quests)
+      setRerollsRemaining(res.rerollsRemaining)
+      setFetchError(res.error || null)
+      if (res.refreshedAccessToken && session?.accountId && onSessionTokenRefreshed) {
+        onSessionTokenRefreshed(session.accountId, res.refreshedAccessToken)
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -56,8 +66,9 @@ export const QuestsScreen: React.FC<QuestsScreenProps> = ({
   }
 
   useEffect(() => {
+    setLoading(true)
     loadQuests()
-  }, [session])
+  }, [session?.accountId, session?.accessToken])
 
   const handleSaveConfig = async (newConfig: AutoRerollConfig) => {
     setAutoRerollConfig(newConfig)
@@ -130,8 +141,10 @@ export const QuestsScreen: React.FC<QuestsScreenProps> = ({
       {/* Stats Summary Bar */}
       <View style={styles.summaryBar}>
         <View style={styles.summaryCol}>
-          <Text style={styles.summaryLabel}>Active Quests</Text>
-          <Text style={styles.summaryValue}>{quests.length}</Text>
+          <Text style={styles.summaryLabel}>Active ({session?.displayName || 'No Account'})</Text>
+          <Text style={styles.summaryValue}>
+            {quests.length} {session ? `(${rerollsRemaining} Rerolls)` : ''}
+          </Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.summaryCol}>
@@ -173,8 +186,11 @@ export const QuestsScreen: React.FC<QuestsScreenProps> = ({
         </View>
 
         <Text style={styles.ruleSubtext}>
-          Checks daily quests against blacklist ({autoRerollConfig.blacklistedKeywords.length} keywords
-          {autoRerollConfig.rerollLowVBucks ? ', 50 VB filter' : ''})
+          Blacklist: {autoRerollConfig.blacklistedTemplates.length} quests picked
+          {autoRerollConfig.blacklistedKeywords.length > 0
+            ? `, ${autoRerollConfig.blacklistedKeywords.length} keywords`
+            : ''}
+          {autoRerollConfig.rerollLowVBucks ? ', 100 VB filter' : ''}
         </Text>
       </View>
 
@@ -201,7 +217,23 @@ export const QuestsScreen: React.FC<QuestsScreenProps> = ({
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              {session ? (
+              {fetchError ? (
+                <>
+                  <Ionicons name="warning-outline" size={40} color="#f59e0b" />
+                  <Text style={styles.emptyTitle}>Could Not Load Quests</Text>
+                  <Text style={styles.emptySub}>{fetchError}</Text>
+                  <TouchableOpacity
+                    style={[styles.singleAutoReplaceBtn, { marginTop: 14, paddingHorizontal: 18 }]}
+                    onPress={() => {
+                      setLoading(true)
+                      loadQuests()
+                    }}
+                  >
+                    <Ionicons name="refresh" size={15} color="#0d1017" />
+                    <Text style={styles.singleAutoReplaceBtnText}>Retry</Text>
+                  </TouchableOpacity>
+                </>
+              ) : session ? (
                 <>
                   <Ionicons name="checkmark-circle-outline" size={40} color="#22c55e" />
                   <Text style={styles.emptyTitle}>All Daily Quests Cleared!</Text>
