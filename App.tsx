@@ -16,7 +16,8 @@ import {
   loadAllAccounts,
   switchActiveAccount,
   removeAccount,
-  reorderAccounts
+  reorderAccounts,
+  refreshAllAccountsVbucks
 } from './src/api/epic-auth'
 import { getSecureItem, saveSecureItem } from './src/utils/storage'
 import { EpicAccountSession, SavedAccount } from './src/types'
@@ -29,6 +30,7 @@ export default function App() {
   const [accounts, setAccounts] = useState<SavedAccount[]>([])
   const [showGrandTotal, setShowGrandTotal] = useState<boolean>(false)
   const [vaultModalVisible, setVaultModalVisible] = useState<boolean>(false)
+  const [refreshingAllBalances, setRefreshingAllBalances] = useState<boolean>(false)
 
   const refreshData = async () => {
     const s = await loadSavedSession()
@@ -75,6 +77,30 @@ export default function App() {
   const handleSessionTokenRefreshed = (accountId: string, accessToken: string) => {
     setSession((prev) => (prev && prev.accountId === accountId ? { ...prev, accessToken } : prev))
     setAccounts((prev) => prev.map((a) => (a.accountId === accountId ? { ...a, accessToken } : a)))
+  }
+
+  const handleRefreshAllBalances = async () => {
+    if (refreshingAllBalances || accounts.length === 0) return
+    setRefreshingAllBalances(true)
+    try {
+      const updated = await refreshAllAccountsVbucks(accounts)
+      setAccounts(updated)
+      const active = updated.find((a) => a.accountId === session?.accountId) || updated.find((a) => a.isActive)
+      if (active) {
+        setSession({
+          accountId: active.accountId,
+          displayName: active.displayName,
+          accessToken: active.accessToken,
+          expiresAt: active.expiresAt,
+          deviceId: active.deviceId,
+          secret: active.secret,
+          vbucksBalance: active.vbucks?.total || 0,
+          vbucksDetail: active.vbucks
+        })
+      }
+    } finally {
+      setRefreshingAllBalances(false)
+    }
   }
 
   const handleRemoveAccount = async (accountId: string) => {
@@ -203,6 +229,8 @@ export default function App() {
           onAddAccountPress={() => {
             setVaultModalVisible(false)
           }}
+          onRefreshAll={handleRefreshAllBalances}
+          refreshingAll={refreshingAllBalances}
           showGrandTotalInHeader={showGrandTotal}
           onToggleHeaderTotal={handleToggleGrandTotal}
         />

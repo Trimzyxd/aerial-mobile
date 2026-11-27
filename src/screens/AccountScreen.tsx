@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -54,11 +54,12 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
   const [refreshingBalance, setRefreshingBalance] = useState<boolean>(false)
   const [checkingOta, setCheckingOta] = useState<boolean>(false)
   const [otaStage, setOtaStage] = useState<string | null>(null)
+  const [remoteUpdateBadge, setRemoteUpdateBadge] = useState<'UP_TO_DATE' | 'OTA_AVAILABLE' | 'APK_AVAILABLE' | null>(null)
   const updatesState = Updates.useUpdates()
 
   const OTA_MANIFEST_URL = 'https://trimzyxd.github.io/aerial-mobile/ota/android.json'
   const GITHUB_RELEASES_URL = 'https://github.com/Trimzyxd/aerial-mobile/releases/latest'
-  const appVersion = appConfig?.expo?.version || '1.0.4'
+  const appVersion = appConfig?.expo?.version || '1.0.5'
 
   const withTimeout = async <T,>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -95,6 +96,34 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
       clearTimeout(timer)
     }
   }
+
+  useEffect(() => {
+    if (!Updates.isEnabled) return
+    let mounted = true
+    probeRemoteManifest().then((mf) => {
+      if (!mounted || !mf) return
+      if (mf.runtimeVersion && Updates.runtimeVersion && mf.runtimeVersion !== Updates.runtimeVersion) {
+        setRemoteUpdateBadge('APK_AVAILABLE')
+        return
+      }
+      const curId = Updates.updateId?.toLowerCase()
+      const remId = mf.id?.toLowerCase()
+      if (remId && curId && !Updates.isEmbeddedLaunch && remId === curId) {
+        setRemoteUpdateBadge('UP_TO_DATE')
+        return
+      }
+      const remTs = mf.createdAt ? Date.parse(mf.createdAt) : NaN
+      const locTs = Updates.createdAt ? Updates.createdAt.getTime() : NaN
+      if (!Number.isNaN(remTs) && !Number.isNaN(locTs) && remTs <= locTs) {
+        setRemoteUpdateBadge('UP_TO_DATE')
+        return
+      }
+      setRemoteUpdateBadge('OTA_AVAILABLE')
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const getLatestNativeUpdateError = async (): Promise<string | null> => {
     if (updatesState.downloadError?.message) return updatesState.downloadError.message
@@ -157,6 +186,7 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
       }
 
       if (remoteId && currentId && !Updates.isEmbeddedLaunch && remoteId === currentId) {
+        setRemoteUpdateBadge('UP_TO_DATE')
         Alert.alert('Up to Date', 'You are running the latest version of Aerial Mobile.')
         return
       }
@@ -168,6 +198,7 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
         !Number.isNaN(localCreatedMs) &&
         remoteCreatedMs <= localCreatedMs
       ) {
+        setRemoteUpdateBadge('UP_TO_DATE')
         Alert.alert('Up to Date', 'You are running the latest version of Aerial Mobile.')
         return
       }
@@ -716,9 +747,15 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
                     ? `Downloading update (${Math.round((updatesState.downloadProgress ?? 0) * 100)}%)...`
                     : updatesState.isStartupProcedureRunning
                       ? 'Syncing OTA status in background...'
-                      : Updates.isEnabled
-                        ? 'OTA Enabled · Pulls JS updates without reinstalling APK'
-                        : 'Development mode · Install Release APK for OTA'}
+                      : remoteUpdateBadge === 'OTA_AVAILABLE'
+                        ? 'Update available · Tap Check Update'
+                        : remoteUpdateBadge === 'APK_AVAILABLE'
+                          ? 'New APK release available · Tap Check Update'
+                          : remoteUpdateBadge === 'UP_TO_DATE'
+                            ? 'Up to date · Tap Check Update anytime'
+                            : Updates.isEnabled
+                              ? 'Manual OTA check enabled'
+                              : 'Development mode · Install Release APK for OTA'}
             </Text>
           </View>
           <TouchableOpacity

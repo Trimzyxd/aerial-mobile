@@ -26,6 +26,7 @@ export interface BulkFriendAcceptResult {
 }
 
 const EPIC_UA = 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
+const displayNameCache = new Map<string, string>()
 
 function extractEpicDisplayName(user: any): string | undefined {
   if (typeof user?.displayName === 'string' && user.displayName.trim().length > 0) {
@@ -53,11 +54,25 @@ async function resolveAccountDisplayNames(
     return namesMap
   }
 
+  const uncachedIds: string[] = []
+  for (const id of uniqueIds) {
+    const cached = displayNameCache.get(id)
+    if (cached) {
+      namesMap.set(id, cached)
+    } else {
+      uncachedIds.push(id)
+    }
+  }
+
+  if (uncachedIds.length === 0) {
+    return namesMap
+  }
+
   let activeToken = accessToken
   const chunkSize = 100
 
-  for (let i = 0; i < uniqueIds.length; i += chunkSize) {
-    const chunk = uniqueIds.slice(i, i + chunkSize)
+  for (let i = 0; i < uncachedIds.length; i += chunkSize) {
+    const chunk = uncachedIds.slice(i, i + chunkSize)
     const query = chunk.map((id) => `accountId=${encodeURIComponent(id)}`).join('&')
     const url = `https://account-public-service-prod.ol.epicgames.com/account/api/public/account?${query}`
 
@@ -86,6 +101,7 @@ async function resolveAccountDisplayNames(
         for (const user of users) {
           const resolved = extractEpicDisplayName(user)
           if (user?.id && resolved) {
+            displayNameCache.set(user.id, resolved)
             namesMap.set(user.id, resolved)
           }
         }
@@ -156,7 +172,7 @@ export async function fetchFriendsSummary(accessToken?: string, accountId?: stri
         return {
           accountId: f.accountId,
           displayName: namesMap.get(f.accountId) || f.displayName || f.alias || f.accountId,
-          status: 'ONLINE' as const,
+          status: 'UNKNOWN' as const,
           created: f.created,
           isEligible48h,
           hoursRemaining

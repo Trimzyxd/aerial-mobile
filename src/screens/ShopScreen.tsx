@@ -17,7 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { Header } from '../components/Header'
 import { ShopItemCard, SHOP_CARD_ROW_HEIGHT, getRarityColor } from '../components/ShopItemCard'
-import { fetchItemShop, sendGift, purchaseItem } from '../api/item-shop'
+import { fetchItemShop, fetchOwnedCosmeticIds, sendGift, purchaseItem } from '../api/item-shop'
 import { fetchFriendsSummary } from '../api/friends'
 import { ShopItem, Friend, EpicAccountSession, SavedAccount } from '../types'
 
@@ -46,6 +46,7 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
   const [selectedDetailItem, setSelectedDetailItem] = useState<ShopItem | null>(null)
   const [isBuying, setIsBuying] = useState<boolean>(false)
   const [detailImageLoading, setDetailImageLoading] = useState<boolean>(true)
+  const [ownedIds, setOwnedIds] = useState<Set<string>>(new Set())
 
   // Gifting modal states
   const [giftingItem, setGiftingItem] = useState<ShopItem | null>(null)
@@ -87,6 +88,17 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
   useEffect(() => {
     if (session?.accessToken && shopError && items.length === 0 && !loading) {
       loadShop(true)
+    }
+    if (session?.accessToken && session?.accountId) {
+      let active = true
+      fetchOwnedCosmeticIds(session.accessToken, session.accountId).then((set) => {
+        if (active) setOwnedIds(set)
+      })
+      return () => {
+        active = false
+      }
+    } else {
+      setOwnedIds(new Set())
     }
   }, [session?.accountId, session?.accessToken])
 
@@ -167,6 +179,15 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
                 accountId: session?.accountId
               })
               if (res.success) {
+                if (item.grantedItems && item.grantedItems.length > 0) {
+                  setOwnedIds((prev) => {
+                    const next = new Set(prev)
+                    for (const g of item.grantedItems!) {
+                      if (g.id) next.add(g.id.toLowerCase())
+                    }
+                    return next
+                  })
+                }
                 Alert.alert(
                   'Purchase Successful!',
                   `You have unlocked "${item.name}"! It is now available in your Fortnite Locker.`
@@ -245,6 +266,11 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
   }
 
   const detailRarityTheme = selectedDetailItem ? getRarityColor(selectedDetailItem.rarity) : null
+  const isDetailOwned = Boolean(
+    selectedDetailItem?.grantedItems &&
+      selectedDetailItem.grantedItems.length > 0 &&
+      selectedDetailItem.grantedItems.every((g) => ownedIds.has(g.id.toLowerCase()))
+  )
 
   return (
     <View style={styles.container}>
@@ -408,6 +434,12 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
                         <Text style={styles.bundlePillText}>BUNDLE</Text>
                       </View>
                     )}
+                    {isDetailOwned && (
+                      <View style={[styles.bundlePill, { backgroundColor: '#15803d' }]}>
+                        <Ionicons name="checkmark" size={10} color="#ffffff" style={{ marginRight: 2 }} />
+                        <Text style={styles.bundlePillText}>OWNED</Text>
+                      </View>
+                    )}
                   </View>
                   <TouchableOpacity
                     onPress={() => setSelectedDetailItem(null)}
@@ -516,13 +548,18 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
                 {/* Bottom Action Bar: Buy and Gift Buttons */}
                 <View style={styles.detailActionBar}>
                   <TouchableOpacity
-                    style={[styles.buyBtn, isBuying && styles.buyBtnDisabled]}
+                    style={[styles.buyBtn, (isBuying || isDetailOwned) && styles.buyBtnDisabled]}
                     onPress={() => handleBuyItem(selectedDetailItem)}
-                    disabled={isBuying}
+                    disabled={isBuying || isDetailOwned}
                     activeOpacity={0.8}
                   >
                     {isBuying ? (
                       <ActivityIndicator size="small" color="#0d1017" />
+                    ) : isDetailOwned ? (
+                      <>
+                        <Ionicons name="checkmark-circle" size={16} color="#0d1017" />
+                        <Text style={styles.buyBtnText}>Already Owned</Text>
+                      </>
                     ) : (
                       <>
                         <Ionicons name="cart" size={16} color="#0d1017" />

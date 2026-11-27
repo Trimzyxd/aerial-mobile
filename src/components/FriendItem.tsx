@@ -21,25 +21,20 @@ export const FriendItem: React.FC<FriendItemProps> = ({
   onRemove
 }) => {
   if (friend) {
-    const isOnline = friend.status === 'ONLINE'
-    const isAway = friend.status === 'AWAY'
+    const isGiftReady = friend.isEligible48h !== false
 
     return (
       <View style={styles.container}>
         <View style={styles.leftCol}>
           <View style={styles.avatar}>
             <Ionicons name="person" size={16} color="#94a3b8" />
-            <View
-              style={[
-                styles.statusDot,
-                isOnline ? styles.onlineDot : isAway ? styles.awayDot : styles.offlineDot
-              ]}
-            />
           </View>
           <View style={styles.nameBlock}>
             <Text style={styles.displayName}>{friend.displayName}</Text>
-            <Text style={styles.statusText}>
-              {friend.status === 'ONLINE' ? 'Online' : friend.status === 'AWAY' ? 'Away' : friend.lastSeen || 'Offline'}
+            <Text style={[styles.statusText, !isGiftReady && { color: '#fbbf24' }]}>
+              {isGiftReady
+                ? 'Gift Eligible (48h+)'
+                : `Gift ready in ${friend.hoursRemaining || 48}h`}
             </Text>
           </View>
         </View>

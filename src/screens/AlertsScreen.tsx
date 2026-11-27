@@ -24,6 +24,22 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({
   const [refreshing, setRefreshing] = useState<boolean>(false)
   const [alertsError, setAlertsError] = useState<string | null>(null)
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'VBUCKS' | 'TWINE' | 'CANNY' | 'PLANK' | 'STONE'>('VBUCKS')
+  const [resetCountdown, setResetCountdown] = useState<string>('')
+
+  const formatDailyReset = () => {
+    const now = new Date()
+    const nextUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0)
+    const diffMs = Math.max(0, nextUtcMidnight - now.getTime())
+    const hrs = Math.floor(diffMs / 3600000)
+    const mins = Math.floor((diffMs % 3600000) / 60000)
+    return `${hrs}h ${mins}m`
+  }
+
+  useEffect(() => {
+    setResetCountdown(formatDailyReset())
+    const interval = setInterval(() => setResetCountdown(formatDailyReset()), 60000)
+    return () => clearInterval(interval)
+  }, [])
 
   const loadAlerts = async (showSpinner = false) => {
     if (showSpinner) setLoading(true)
@@ -52,14 +68,21 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({
   }, [session?.accountId, session?.accessToken])
 
   const filteredAlerts = useMemo(() => {
-    return alerts.filter(a => {
-      if (selectedFilter === 'VBUCKS') return a.rewards.some(r => r.isVBucks)
-      if (selectedFilter === 'TWINE') return a.zone.toLowerCase().includes('twine')
-      if (selectedFilter === 'CANNY') return a.zone.toLowerCase().includes('canny')
-      if (selectedFilter === 'PLANK') return a.zone.toLowerCase().includes('plank')
-      if (selectedFilter === 'STONE') return a.zone.toLowerCase().includes('stone')
-      return true
-    })
+    return alerts
+      .filter(a => {
+        if (selectedFilter === 'VBUCKS') return a.rewards.some(r => r.isVBucks)
+        if (selectedFilter === 'TWINE') return a.zone.toLowerCase().includes('twine')
+        if (selectedFilter === 'CANNY') return a.zone.toLowerCase().includes('canny')
+        if (selectedFilter === 'PLANK') return a.zone.toLowerCase().includes('plank')
+        if (selectedFilter === 'STONE') return a.zone.toLowerCase().includes('stone')
+        return true
+      })
+      .sort((a, b) => {
+        const aVb = a.rewards.some(r => r.isVBucks) ? 1 : 0
+        const bVb = b.rewards.some(r => r.isVBucks) ? 1 : 0
+        if (aVb !== bVb) return bVb - aVb
+        return b.powerLevel - a.powerLevel
+      })
   }, [alerts, selectedFilter])
 
   const totalVbucks = useMemo(() => {
@@ -87,6 +110,12 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({
           <Ionicons name="sparkles" size={16} color="#f59e0b" />
           <Text style={styles.vbucksSummaryText}>Today's V-Bucks Total: <Text style={styles.highlight}>{totalVbucks} V-Bucks</Text></Text>
         </View>
+        {resetCountdown ? (
+          <View style={styles.resetPill}>
+            <Ionicons name="time-outline" size={12} color="#94a3b8" />
+            <Text style={styles.resetPillText}>{resetCountdown}</Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.filterBarWrapper}>
@@ -213,11 +242,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d1017'
   },
   bannerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
     backgroundColor: '#161d2d',
     borderBottomWidth: 1,
     borderBottomColor: '#202b3f'
+  },
+  resetPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#1e293b',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6
+  },
+  resetPillText: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600'
   },
   vbucksSummary: {
     flexDirection: 'row',

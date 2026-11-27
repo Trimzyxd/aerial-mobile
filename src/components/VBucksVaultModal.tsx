@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import {
   Modal,
   View,
@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
-  Alert
+  Alert,
+  ActivityIndicator
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { SavedAccount } from '../types'
@@ -21,6 +22,8 @@ interface VBucksVaultModalProps {
   onRemoveAccount: (accountId: string) => void
   onReorderAccount?: (fromIndex: number, toIndex: number) => void
   onAddAccountPress: () => void
+  onRefreshAll?: () => Promise<void> | void
+  refreshingAll?: boolean
   showGrandTotalInHeader: boolean
   onToggleHeaderTotal: (val: boolean) => void
 }
@@ -33,6 +36,8 @@ export const VBucksVaultModal: React.FC<VBucksVaultModalProps> = ({
   onRemoveAccount,
   onReorderAccount,
   onAddAccountPress,
+  onRefreshAll,
+  refreshingAll = false,
   showGrandTotalInHeader,
   onToggleHeaderTotal
 }) => {
@@ -76,8 +81,27 @@ export const VBucksVaultModal: React.FC<VBucksVaultModalProps> = ({
                   <Ionicons name="sparkles" size={16} color="#fbbf24" />
                   <Text style={styles.grandTotalLabel}>Total Across All Accounts</Text>
                 </View>
-                <View style={styles.accountCountBadge}>
-                  <Text style={styles.accountCountText}>{accounts.length} Accounts</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  {onRefreshAll && accounts.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.syncAllBtn}
+                      onPress={() => void onRefreshAll()}
+                      disabled={refreshingAll}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      {refreshingAll ? (
+                        <ActivityIndicator size="small" color="#38bdf8" />
+                      ) : (
+                        <>
+                          <Ionicons name="refresh" size={12} color="#38bdf8" />
+                          <Text style={styles.syncAllText}>Sync</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                  <View style={styles.accountCountBadge}>
+                    <Text style={styles.accountCountText}>{accounts.length} Accounts</Text>
+                  </View>
                 </View>
               </View>
 
@@ -311,6 +335,22 @@ const styles = StyleSheet.create({
   },
   accountCountText: {
     color: '#fde68a',
+    fontSize: 10,
+    fontWeight: '700'
+  },
+  syncAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#16233a',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1d4ed8'
+  },
+  syncAllText: {
+    color: '#38bdf8',
     fontSize: 10,
     fontWeight: '700'
   },

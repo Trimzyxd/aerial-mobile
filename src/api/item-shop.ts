@@ -404,6 +404,58 @@ export async function fetchItemShop(options?: {
   }
 }
 
+export async function fetchOwnedCosmeticIds(
+  accessToken?: string,
+  accountId?: string
+): Promise<Set<string>> {
+  const owned = new Set<string>()
+  if (!accessToken || !accountId) return owned
+
+  const url = `https://fngw-mcp-gc-livefn.ol.epicgames.com/fortnite/api/game/v2/profile/${accountId}/client/QueryProfile?profileId=athena&rvn=-1`
+  const doPost = (token: string) =>
+    fetchWithTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...EPIC_STOREFRONT_HEADERS
+        },
+        body: JSON.stringify({})
+      },
+      15000
+    )
+
+  try {
+    let res = await doPost(accessToken)
+    if (res.status === 401 || res.status === 403) {
+      const refreshed = await forceRefreshAccountToken(accountId)
+      if (refreshed?.accessToken) {
+        res = await doPost(refreshed.accessToken)
+      }
+    }
+    if (!res.ok) return owned
+
+    const data = await res.json()
+    const items =
+      data?.profileChanges?.find((c: any) => c?.profile)?.profile?.items ||
+      data?.profileChanges?.[0]?.profile?.items ||
+      {}
+    for (const item of Object.values<any>(items)) {
+      const tid = String(item?.templateId || '')
+      const colonIdx = tid.indexOf(':')
+      if (colonIdx !== -1) {
+        const idPart = tid.slice(colonIdx + 1).trim().toLowerCase()
+        if (idPart) owned.add(idPart)
+      }
+    }
+  } catch (err) {
+    console.warn('Error fetching owned cosmetics', err)
+  }
+  return owned
+}
+
 export async function purchaseItem({
   offerId,
   price,

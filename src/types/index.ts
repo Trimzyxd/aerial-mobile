@@ -62,7 +62,7 @@ export interface AccountDailyQuestsGroup {
 export interface Friend {
   accountId: string
   displayName: string
-  status: 'ONLINE' | 'OFFLINE' | 'AWAY'
+  status: 'ONLINE' | 'OFFLINE' | 'AWAY' | 'UNKNOWN'
   lastSeen?: string
   created?: string
   isEligible48h?: boolean

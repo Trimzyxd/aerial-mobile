@@ -39,10 +39,12 @@ export async function saveSecureItem(key: string, value: string): Promise<void> 
       await deleteTrailingChunks(key, 0)
     } else {
       const numChunks = Math.ceil(value.length / CHUNK_SIZE)
-      for (let i = 0; i < numChunks; i++) {
-        const chunk = value.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
-        await SecureStore.setItemAsync(`${key}_chk_${i}`, chunk)
-      }
+      await Promise.all(
+        Array.from({ length: numChunks }, (_, i) => {
+          const chunk = value.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+          return SecureStore.setItemAsync(`${key}_chk_${i}`, chunk)
+        })
+      )
       await SecureStore.setItemAsync(key, `${CHUNK_PREFIX}${numChunks}`)
       await deleteTrailingChunks(key, numChunks)
     }
@@ -71,15 +73,13 @@ export async function getSecureItem(key: string): Promise<string | null> {
         return memoryStore[key] || null
       }
 
-      let reconstructed = ''
-      for (let i = 0; i < numChunks; i++) {
-        const chunk = await SecureStore.getItemAsync(`${key}_chk_${i}`)
-        if (chunk === null) {
-          return memoryStore[key] || null
-        }
-        reconstructed += chunk
+      const chunks = await Promise.all(
+        Array.from({ length: numChunks }, (_, i) => SecureStore.getItemAsync(`${key}_chk_${i}`))
+      )
+      if (chunks.some((chunk) => chunk === null)) {
+        return memoryStore[key] || null
       }
-      return reconstructed
+      return chunks.join('')
     }
 
     return raw
@@ -103,9 +103,9 @@ export async function deleteSecureItem(key: string): Promise<void> {
     if (raw && raw.startsWith(CHUNK_PREFIX)) {
       const numChunks = parseInt(raw.replace(CHUNK_PREFIX, ''), 10)
       if (!isNaN(numChunks) && numChunks > 0) {
-        for (let i = 0; i < numChunks; i++) {
-          await SecureStore.deleteItemAsync(`${key}_chk_${i}`)
-        }
+        await Promise.all(
+          Array.from({ length: numChunks }, (_, i) => SecureStore.deleteItemAsync(`${key}_chk_${i}`))
+        )
       }
     }
     await SecureStore.deleteItemAsync(key)
