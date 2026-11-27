@@ -1,13 +1,13 @@
 {
-  "id": "8fd357e7-f8db-4843-8fb8-c22512c01ab1",
-  "createdAt": "2026-11-27T05:03:34.181Z",
+  "id": "caac6690-c7c1-475a-b7c2-acd3751c547d",
+  "createdAt": "2026-11-27T05:29:07.032Z",
   "runtimeVersion": "1.0.2",
   "launchAsset": {
-    "hash": "x4N18bErDUSwvoVBwFQ6D2rIRbA3r5is8riODgx8S98",
-    "key": "index-bfb386dabf5c5ace6b28caafdeb8059e",
+    "hash": "uOSXWTS3t38ErKY8bemAmFqmjRF5D94fcYQ-3cS7Xpg",
+    "key": "index-615b8240bbe578bb1eb1bfc919926fc9",
     "contentType": "application/javascript",
     "fileExtension": ".hbc",
-    "url": "_expo/static/js/android/index-bfb386dabf5c5ace6b28caafdeb8059e.hbc"
+    "url": "_expo/static/js/android/index-615b8240bbe578bb1eb1bfc919926fc9.hbc"
   },
   "assets": [
     {
@@ -269,7 +269,7 @@
     "expoClient": {
       "name": "Aerial Mobile",
       "slug": "aerial-mobile",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "runtimeVersion": "1.0.2",
       "orientation": "portrait",
       "userInterfaceStyle": "dark"

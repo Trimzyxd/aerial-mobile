@@ -38,15 +38,19 @@ class MainApplication : Application(), ReactApplication {
     OkHttpClientProvider.setOkHttpClientFactory(
       OkHttpClientFactory {
         OkHttpClientProvider.createClientBuilder()
-          .connectTimeout(15, TimeUnit.SECONDS)
-          .readTimeout(20, TimeUnit.SECONDS)
-          .writeTimeout(15, TimeUnit.SECONDS)
-          .callTimeout(30, TimeUnit.SECONDS)
           .addInterceptor { chain ->
             val originalRequest = chain.request()
             val url = originalRequest.url.toString()
-            val isOtaManifest =
-              url.startsWith("https://trimzyxd.github.io/aerial-mobile/ota/") && url.endsWith(".json")
+            val isOtaAssetOrManifest = url.startsWith("https://trimzyxd.github.io/aerial-mobile/ota/")
+            val isOtaManifest = isOtaAssetOrManifest && url.endsWith(".json")
+            val activeChain = if (isOtaAssetOrManifest) {
+              chain
+                .withConnectTimeout(15, TimeUnit.SECONDS)
+                .withReadTimeout(25, TimeUnit.SECONDS)
+                .withWriteTimeout(15, TimeUnit.SECONDS)
+            } else {
+              chain
+            }
             val request = if (isOtaManifest) {
               originalRequest.newBuilder()
                 .cacheControl(CacheControl.FORCE_NETWORK)
@@ -54,7 +58,7 @@ class MainApplication : Application(), ReactApplication {
             } else {
               originalRequest
             }
-            val response = chain.proceed(request)
+            val response = activeChain.proceed(request)
             if (isOtaManifest && response.isSuccessful && response.header("expo-protocol-version") == null) {
               response.newBuilder()
                 .header("expo-protocol-version", "0")

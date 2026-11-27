@@ -22,12 +22,19 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({
   const [alerts, setAlerts] = useState<MissionAlert[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [refreshing, setRefreshing] = useState<boolean>(false)
+  const [alertsError, setAlertsError] = useState<string | null>(null)
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'VBUCKS' | 'TWINE' | 'CANNY' | 'PLANK' | 'STONE'>('VBUCKS')
 
-  const loadAlerts = async () => {
+  const loadAlerts = async (showSpinner = false) => {
+    if (showSpinner) setLoading(true)
     try {
-      const data = await fetchMissionAlerts()
-      setAlerts(data)
+      const result = await fetchMissionAlerts(session?.accessToken, session?.accountId)
+      if (result.alerts.length > 0) {
+        setAlerts(result.alerts)
+        setAlertsError(null)
+      } else {
+        setAlertsError(result.error || null)
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -37,6 +44,12 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({
   useEffect(() => {
     loadAlerts()
   }, [])
+
+  useEffect(() => {
+    if (session?.accessToken && alerts.length === 0 && !loading) {
+      loadAlerts(true)
+    }
+  }, [session?.accountId, session?.accessToken])
 
   const filteredAlerts = useMemo(() => {
     return alerts.filter(a => {
@@ -173,7 +186,19 @@ export const AlertsScreen: React.FC<AlertsScreenProps> = ({
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No mission alerts found for this filter.</Text>
+              <Text style={styles.emptyText}>
+                {alertsError || 'No mission alerts found for this filter.'}
+              </Text>
+              {alertsError && (
+                <TouchableOpacity
+                  style={styles.retryBtn}
+                  onPress={() => loadAlerts(true)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="refresh" size={14} color="#0d1017" />
+                  <Text style={styles.retryBtnText}>Retry</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
         />
@@ -265,6 +290,22 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: '#64748b',
-    fontSize: 13
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 10
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#38bdf8',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8
+  },
+  retryBtnText: {
+    color: '#0d1017',
+    fontSize: 12,
+    fontWeight: '700'
   }
 })

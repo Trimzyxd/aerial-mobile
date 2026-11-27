@@ -1,5 +1,5 @@
 // Fortnite Item Shop Screen
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Header } from '../components/Header'
-import { ShopItemCard, getRarityColor } from '../components/ShopItemCard'
+import { ShopItemCard, SHOP_CARD_ROW_HEIGHT, getRarityColor } from '../components/ShopItemCard'
 import { fetchItemShop, sendGift, purchaseItem } from '../api/item-shop'
 import { fetchFriendsSummary } from '../api/friends'
 import { ShopItem, Friend, EpicAccountSession, SavedAccount } from '../types'
@@ -85,7 +85,6 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
   }, [])
 
   useEffect(() => {
-    fetchFriendsSummary(session?.accessToken, session?.accountId).then((res) => setFriends(res.friends))
     if (session?.accessToken && shopError && items.length === 0 && !loading) {
       loadShop(true)
     }
@@ -125,10 +124,28 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
     return friends.filter((f) => f.displayName.toLowerCase().includes(q))
   }, [friends, friendSearchQuery])
 
+  const handleSelectItem = useCallback((it: ShopItem) => {
+    setSelectedDetailItem(it)
+    setDetailImageLoading(true)
+  }, [])
+
+  const renderShopItem = useCallback(
+    ({ item }: { item: ShopItem }) => (
+      <ShopItemCard item={item} onPress={handleSelectItem} />
+    ),
+    [handleSelectItem]
+  )
+
   const handleOpenGiftModal = (item: ShopItem) => {
     setGiftingItem(item)
     setSelectedFriend(friends[0] || null)
     setFriendSearchQuery('')
+    if (friends.length === 0 && session?.accessToken) {
+      fetchFriendsSummary(session.accessToken, session.accountId).then((res) => {
+        setFriends(res.friends)
+        setSelectedFriend((prev) => prev || res.friends[0] || null)
+      })
+    }
   }
 
   const handleBuyItem = (item: ShopItem) => {
@@ -315,19 +332,17 @@ export const ShopScreen: React.FC<ShopScreenProps> = ({
           data={filteredItems}
           keyExtractor={(item) => item.id}
           numColumns={2}
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
-          windowSize={5}
-          removeClippedSubviews={false}
-          renderItem={({ item }) => (
-            <ShopItemCard
-              item={item}
-              onPress={(it) => {
-                setSelectedDetailItem(it)
-                setDetailImageLoading(true)
-              }}
-            />
-          )}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          updateCellsBatchingPeriod={40}
+          windowSize={3}
+          removeClippedSubviews={true}
+          getItemLayout={(_, index) => ({
+            length: SHOP_CARD_ROW_HEIGHT,
+            offset: SHOP_CARD_ROW_HEIGHT * index,
+            index
+          })}
+          renderItem={renderShopItem}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl

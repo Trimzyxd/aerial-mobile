@@ -1,11 +1,10 @@
-import React, { useState } from 'react'
+import React, { memo, useState } from 'react'
 import {
   View,
   Text,
   StyleSheet,
   Image,
-  TouchableOpacity,
-  ActivityIndicator
+  TouchableOpacity
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { ShopItem } from '../types'
@@ -27,9 +26,10 @@ export function getRarityColor(rarity: string): { border: string; text: string; 
   return { border: '#334155', text: '#94a3b8', bg: '#1e293b' }
 }
 
-export const ShopItemCard: React.FC<ShopItemCardProps> = ({ item, onPress }) => {
+export const SHOP_CARD_ROW_HEIGHT = 246
+
+export const ShopItemCard: React.FC<ShopItemCardProps> = memo(({ item, onPress }) => {
   const [imageError, setImageError] = useState<boolean>(false)
-  const [imageLoading, setImageLoading] = useState<boolean>(true)
 
   const imageUri = item.images.icon || item.images.featured || ''
   const rarityTheme = getRarityColor(item.rarity)
@@ -55,24 +55,14 @@ export const ShopItemCard: React.FC<ShopItemCardProps> = ({ item, onPress }) => 
     >
       <View style={styles.imageContainer}>
         {imageUri && !imageError ? (
-          <>
-            <Image
-              source={{ uri: imageUri }}
-              style={styles.image}
-              resizeMode="contain"
-              onLoadStart={() => setImageLoading(true)}
-              onLoadEnd={() => setImageLoading(false)}
-              onError={() => {
-                setImageError(true)
-                setImageLoading(false)
-              }}
-            />
-            {imageLoading && (
-              <View style={styles.loaderOverlay}>
-                <ActivityIndicator size="small" color="#38bdf8" />
-              </View>
-            )}
-          </>
+          <Image
+            source={{ uri: imageUri }}
+            style={styles.image}
+            resizeMode="contain"
+            resizeMethod="resize"
+            fadeDuration={0}
+            onError={() => setImageError(true)}
+          />
         ) : (
           <View style={styles.fallbackBox}>
             <Ionicons name="cube-outline" size={40} color="#64748b" />
@@ -125,11 +115,12 @@ export const ShopItemCard: React.FC<ShopItemCardProps> = ({ item, onPress }) => 
       </View>
     </TouchableOpacity>
   )
-}
+})
 
 const styles = StyleSheet.create({
   card: {
     flex: 1,
+    height: 234,
     backgroundColor: '#161b26',
     borderRadius: 12,
     margin: 6,

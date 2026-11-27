@@ -57,7 +57,8 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
   const updatesState = Updates.useUpdates()
 
   const OTA_MANIFEST_URL = 'https://trimzyxd.github.io/aerial-mobile/ota/android.json'
-  const appVersion = appConfig?.expo?.version || '1.0.3'
+  const GITHUB_RELEASES_URL = 'https://github.com/Trimzyxd/aerial-mobile/releases/latest'
+  const appVersion = appConfig?.expo?.version || '1.0.4'
 
   const withTimeout = async <T,>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -73,9 +74,9 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
     }
   }
 
-  const probeRemoteManifest = async (): Promise<{ id?: string; runtimeVersion?: string } | null> => {
+  const probeRemoteManifest = async (): Promise<{ id?: string; createdAt?: string; runtimeVersion?: string } | null> => {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 8000)
+    const timer = setTimeout(() => controller.abort(), 10000)
     try {
       const res = await fetch(`${OTA_MANIFEST_URL}?t=${Date.now()}`, {
         method: 'GET',
@@ -87,7 +88,7 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
         }
       })
       if (!res.ok) return null
-      return (await res.json()) as { id?: string; runtimeVersion?: string }
+      return (await res.json()) as { id?: string; createdAt?: string; runtimeVersion?: string }
     } catch {
       return null
     } finally {
@@ -103,7 +104,9 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
       const recentIssue = [...logs]
         .reverse()
         .find((entry) => entry.level === 'error' || entry.level === 'fatal' || entry.level === 'warn')
-      return recentIssue?.message || null
+      if (recentIssue?.message) return recentIssue.message
+      const lastEntry = logs[logs.length - 1]
+      return lastEntry?.message ? `[${lastEntry.level}] ${lastEntry.message}` : null
     } catch {
       return null
     }
@@ -137,11 +140,6 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
       const currentId = Updates.updateId?.toLowerCase()
       const remoteId = remoteManifest?.id?.toLowerCase()
 
-      if (remoteId && currentId && !Updates.isEmbeddedLaunch && remoteId === currentId) {
-        Alert.alert('Up to Date', 'You are running the latest version of Aerial Mobile.')
-        return
-      }
-
       if (
         remoteManifest?.runtimeVersion &&
         Updates.runtimeVersion &&
@@ -149,8 +147,28 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
       ) {
         Alert.alert(
           'APK Update Required',
-          `Native runtime ${remoteManifest.runtimeVersion} is out (current ${Updates.runtimeVersion}). Install the latest APK from GitHub Releases.`
+          `Native runtime ${remoteManifest.runtimeVersion} is out (current ${Updates.runtimeVersion}). Download the latest APK from GitHub Releases.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Download APK', onPress: () => void Linking.openURL(GITHUB_RELEASES_URL) }
+          ]
         )
+        return
+      }
+
+      if (remoteId && currentId && !Updates.isEmbeddedLaunch && remoteId === currentId) {
+        Alert.alert('Up to Date', 'You are running the latest version of Aerial Mobile.')
+        return
+      }
+
+      const remoteCreatedMs = remoteManifest?.createdAt ? Date.parse(remoteManifest.createdAt) : NaN
+      const localCreatedMs = Updates.createdAt ? Updates.createdAt.getTime() : NaN
+      if (
+        !Number.isNaN(remoteCreatedMs) &&
+        !Number.isNaN(localCreatedMs) &&
+        remoteCreatedMs <= localCreatedMs
+      ) {
+        Alert.alert('Up to Date', 'You are running the latest version of Aerial Mobile.')
         return
       }
 
@@ -162,8 +180,8 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
 
       const check = await withTimeout(
         Updates.checkForUpdateAsync(),
-        15000,
-        'Update check timed out (background updater is busy or network stalled). Force-close and reopen the app once to refresh cleanly.'
+        35000,
+        `Update check timed out (startupBusy=${updatesState.isStartupProcedureRunning ? 'yes' : 'no'}). Try restarting the app once or download the APK from GitHub Releases.`
       )
 
       if (check.isRollBackToEmbedded) {
@@ -187,8 +205,8 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
       setOtaStage('Downloading update...')
       await withTimeout(
         Updates.fetchUpdateAsync(),
-        45000,
-        'Update download timed out after 45s. Check your connection and try again.'
+        60000,
+        'Update download timed out after 60s. Check your connection and try again.'
       )
 
       promptRestartToApply()
@@ -202,7 +220,11 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
         'Update Check Failed',
         nativeError && err?.message && !String(err.message).includes(nativeError)
           ? `${err.message}\n\nNative log: ${nativeError}`
-          : message
+          : message,
+        [
+          { text: 'OK', style: 'cancel' },
+          { text: 'Download APK', onPress: () => void Linking.openURL(GITHUB_RELEASES_URL) }
+        ]
       )
     } finally {
       setCheckingOta(false)

@@ -229,17 +229,25 @@ export async function fetchItemShop(options?: {
       const instrument = entry.instruments?.[0]
       const primaryItem = brItem || track || car || instrument || {}
 
-      // High-resolution image extraction hierarchy
+      // Lightweight thumbnail for fast 2-column grid scrolling; keep hi-res render for detail modal
       const displayAssetImg = entry.newDisplayAsset?.renderImages?.[0]?.image
       const bundleImg = entry.bundle?.image
       const itemIcon =
-        brItem?.images?.icon ||
         brItem?.images?.smallIcon ||
+        brItem?.images?.icon ||
         track?.albumArt ||
+        car?.images?.small ||
         car?.images?.large ||
+        instrument?.images?.small ||
         instrument?.images?.large
 
-      const resolvedImage = displayAssetImg || bundleImg || itemIcon || brItem?.images?.featured
+      const gridThumb = itemIcon || bundleImg || displayAssetImg || brItem?.images?.featured
+      const featuredImage =
+        displayAssetImg ||
+        bundleImg ||
+        entry.newDisplayAsset?.renderImages?.[1]?.image ||
+        brItem?.images?.featured ||
+        itemIcon
 
       const name =
         entry.bundle?.name ||
@@ -342,7 +350,7 @@ export async function fetchItemShop(options?: {
           description: primaryItem.description || '',
           type: primaryItem.type?.displayValue || primaryItem.type?.value || (isBundle ? 'Bundle' : 'Cosmetic'),
           rarity,
-          image: resolvedImage
+          image: gridThumb
         })
       }
 
@@ -357,8 +365,8 @@ export async function fetchItemShop(options?: {
         isBundle,
         banner: entry.banner?.value,
         images: {
-          icon: resolvedImage,
-          featured: entry.newDisplayAsset?.renderImages?.[1]?.image || brItem?.images?.featured
+          icon: gridThumb,
+          featured: featuredImage
         },
         grantedItems,
         giftable: entry.giftable ?? true,
