@@ -16,6 +16,7 @@ import com.facebook.react.modules.network.OkHttpClientProvider
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ExpoReactHostFactory
 import okhttp3.CacheControl
+import java.util.concurrent.TimeUnit
 
 class MainApplication : Application(), ReactApplication {
 
@@ -37,6 +38,10 @@ class MainApplication : Application(), ReactApplication {
     OkHttpClientProvider.setOkHttpClientFactory(
       OkHttpClientFactory {
         OkHttpClientProvider.createClientBuilder()
+          .connectTimeout(15, TimeUnit.SECONDS)
+          .readTimeout(20, TimeUnit.SECONDS)
+          .writeTimeout(15, TimeUnit.SECONDS)
+          .callTimeout(30, TimeUnit.SECONDS)
           .addInterceptor { chain ->
             val originalRequest = chain.request()
             val url = originalRequest.url.toString()

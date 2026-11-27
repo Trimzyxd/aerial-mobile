@@ -2,7 +2,7 @@
   "expo": {
     "name": "Aerial Mobile",
     "slug": "aerial-mobile",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "runtimeVersion": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

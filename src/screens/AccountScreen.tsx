@@ -13,6 +13,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as Updates from 'expo-updates'
+import appConfig from '../../app.json'
 import { Header } from '../components/Header'
 import {
   loginWithCode,
@@ -52,32 +53,160 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
   const [loading, setLoading] = useState<boolean>(false)
   const [refreshingBalance, setRefreshingBalance] = useState<boolean>(false)
   const [checkingOta, setCheckingOta] = useState<boolean>(false)
+  const [otaStage, setOtaStage] = useState<string | null>(null)
+  const updatesState = Updates.useUpdates()
+
+  const OTA_MANIFEST_URL = 'https://trimzyxd.github.io/aerial-mobile/ota/android.json'
+  const appVersion = appConfig?.expo?.version || '1.0.3'
+
+  const withTimeout = async <T,>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(timeoutMessage)), ms)
+        })
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  const probeRemoteManifest = async (): Promise<{ id?: string; runtimeVersion?: string } | null> => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 8000)
+    try {
+      const res = await fetch(`${OTA_MANIFEST_URL}?t=${Date.now()}`, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache'
+        }
+      })
+      if (!res.ok) return null
+      return (await res.json()) as { id?: string; runtimeVersion?: string }
+    } catch {
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  const getLatestNativeUpdateError = async (): Promise<string | null> => {
+    if (updatesState.downloadError?.message) return updatesState.downloadError.message
+    if (updatesState.checkError?.message) return updatesState.checkError.message
+    try {
+      const logs = await withTimeout(Updates.readLogEntriesAsync(5 * 60 * 1000), 2500, '')
+      const recentIssue = [...logs]
+        .reverse()
+        .find((entry) => entry.level === 'error' || entry.level === 'fatal' || entry.level === 'warn')
+      return recentIssue?.message || null
+    } catch {
+      return null
+    }
+  }
+
+  const promptRestartToApply = () => {
+    Alert.alert(
+      'Update Downloaded',
+      'A new update has been downloaded. Restart now to apply?',
+      [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Restart Now', onPress: () => void Updates.reloadAsync() }
+      ]
+    )
+  }
 
   const handleCheckOtaUpdate = async () => {
     if (!Updates.isEnabled) {
       Alert.alert('OTA Disabled', 'Over-the-air updates require a release build with updates enabled.')
       return
     }
+    if (updatesState.isUpdatePending) {
+      promptRestartToApply()
+      return
+    }
+
     setCheckingOta(true)
+    setOtaStage('Checking manifest...')
     try {
-      const check = await Updates.checkForUpdateAsync()
+      const remoteManifest = await probeRemoteManifest()
+      const currentId = Updates.updateId?.toLowerCase()
+      const remoteId = remoteManifest?.id?.toLowerCase()
+
+      if (remoteId && currentId && !Updates.isEmbeddedLaunch && remoteId === currentId) {
+        Alert.alert('Up to Date', 'You are running the latest version of Aerial Mobile.')
+        return
+      }
+
+      if (
+        remoteManifest?.runtimeVersion &&
+        Updates.runtimeVersion &&
+        remoteManifest.runtimeVersion !== Updates.runtimeVersion
+      ) {
+        Alert.alert(
+          'APK Update Required',
+          `Native runtime ${remoteManifest.runtimeVersion} is out (current ${Updates.runtimeVersion}). Install the latest APK from GitHub Releases.`
+        )
+        return
+      }
+
+      setOtaStage(
+        updatesState.isStartupProcedureRunning
+          ? 'Waiting for launch sync...'
+          : 'Checking native updater...'
+      )
+
+      const check = await withTimeout(
+        Updates.checkForUpdateAsync(),
+        15000,
+        'Update check timed out (background updater is busy or network stalled). Force-close and reopen the app once to refresh cleanly.'
+      )
+
+      if (check.isRollBackToEmbedded) {
+        promptRestartToApply()
+        return
+      }
+
       if (!check.isAvailable) {
         Alert.alert('Up to Date', 'You are running the latest version of Aerial Mobile.')
         return
       }
-      await Updates.fetchUpdateAsync()
-      Alert.alert(
-        'Update Downloaded',
-        'A new update has been downloaded. Restart now to apply?',
-        [
-          { text: 'Later', style: 'cancel' },
-          { text: 'Restart Now', onPress: () => Updates.reloadAsync() }
-        ]
+
+      const checkManifestId =
+        check.manifest && 'id' in check.manifest ? String(check.manifest.id).toLowerCase() : null
+      const pendingId = updatesState.downloadedUpdate?.updateId?.toLowerCase()
+      if (checkManifestId && pendingId && checkManifestId === pendingId) {
+        promptRestartToApply()
+        return
+      }
+
+      setOtaStage('Downloading update...')
+      await withTimeout(
+        Updates.fetchUpdateAsync(),
+        45000,
+        'Update download timed out after 45s. Check your connection and try again.'
       )
+
+      promptRestartToApply()
     } catch (err: any) {
-      Alert.alert('Update Check Failed', err?.message || 'Could not reach GitHub OTA endpoint.')
+      const nativeError = await getLatestNativeUpdateError()
+      const message =
+        err?.message ||
+        nativeError ||
+        'Could not reach GitHub OTA endpoint.'
+      Alert.alert(
+        'Update Check Failed',
+        nativeError && err?.message && !String(err.message).includes(nativeError)
+          ? `${err.message}\n\nNative log: ${nativeError}`
+          : message
+      )
     } finally {
       setCheckingOta(false)
+      setOtaStage(null)
     }
   }
 
@@ -544,11 +673,30 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
         {/* Over-The-Air App Update Card (Always Visible) */}
         <View style={styles.otaCard}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.otaTitle}>App Version 1.0.2 (GitHub OTA)</Text>
+            <Text style={styles.otaTitle}>
+              App Version {appVersion} ·{' '}
+              {!Updates.isEnabled
+                ? 'Dev Build'
+                : Updates.isEmbeddedLaunch
+                  ? 'Base APK'
+                  : Updates.updateId
+                    ? `OTA ${Updates.updateId.slice(0, 7)}`
+                    : 'GitHub OTA'}
+            </Text>
             <Text style={styles.otaSub}>
-              {Updates.isEnabled
-                ? 'OTA Enabled · Pulls JS updates without reinstalling APK'
-                : 'Development mode · Install Release APK for OTA'}
+              {checkingOta && otaStage
+                ? updatesState.isDownloading && typeof updatesState.downloadProgress === 'number' && updatesState.downloadProgress > 0
+                  ? `${otaStage} (${Math.round(updatesState.downloadProgress * 100)}%)`
+                  : otaStage
+                : updatesState.isUpdatePending
+                  ? 'Update downloaded · Tap Restart to apply'
+                  : updatesState.isDownloading
+                    ? `Downloading update (${Math.round((updatesState.downloadProgress ?? 0) * 100)}%)...`
+                    : updatesState.isStartupProcedureRunning
+                      ? 'Syncing OTA status in background...'
+                      : Updates.isEnabled
+                        ? 'OTA Enabled · Pulls JS updates without reinstalling APK'
+                        : 'Development mode · Install Release APK for OTA'}
             </Text>
           </View>
           <TouchableOpacity
@@ -557,7 +705,15 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
             disabled={checkingOta}
           >
             {checkingOta ? (
-              <ActivityIndicator size="small" color="#ffffff" />
+              <>
+                <ActivityIndicator size="small" color="#ffffff" />
+                <Text style={styles.otaBtnText}>Wait</Text>
+              </>
+            ) : updatesState.isUpdatePending ? (
+              <>
+                <Ionicons name="refresh-outline" size={14} color="#34d399" />
+                <Text style={[styles.otaBtnText, { color: '#34d399' }]}>Restart</Text>
+              </>
             ) : (
               <>
                 <Ionicons name="cloud-download-outline" size={14} color="#ffffff" />
