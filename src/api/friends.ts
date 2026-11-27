@@ -25,6 +25,79 @@ export interface BulkFriendAcceptResult {
   }>
 }
 
+const EPIC_UA = 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
+
+function extractEpicDisplayName(user: any): string | undefined {
+  if (typeof user?.displayName === 'string' && user.displayName.trim().length > 0) {
+    return user.displayName.trim()
+  }
+  const externalAuths = user?.externalAuths
+  if (externalAuths && typeof externalAuths === 'object') {
+    for (const auth of Object.values(externalAuths) as any[]) {
+      if (typeof auth?.externalDisplayName === 'string' && auth.externalDisplayName.trim().length > 0) {
+        return auth.externalDisplayName.trim()
+      }
+    }
+  }
+  return undefined
+}
+
+async function resolveAccountDisplayNames(
+  accountIds: string[],
+  accessToken: string,
+  ownerAccountId?: string
+): Promise<Map<string, string>> {
+  const namesMap = new Map<string, string>()
+  const uniqueIds = Array.from(new Set(accountIds.filter((id) => typeof id === 'string' && id.trim().length > 0)))
+  if (uniqueIds.length === 0 || !accessToken) {
+    return namesMap
+  }
+
+  let activeToken = accessToken
+  const chunkSize = 100
+
+  for (let i = 0; i < uniqueIds.length; i += chunkSize) {
+    const chunk = uniqueIds.slice(i, i + chunkSize)
+    const query = chunk.map((id) => `accountId=${encodeURIComponent(id)}`).join('&')
+    const url = `https://account-public-service-prod.ol.epicgames.com/account/api/public/account?${query}`
+
+    const doLookup = (token: string) =>
+      fetch(url, {
+        headers: {
+          Authorization: `bearer ${token}`,
+          'User-Agent': EPIC_UA
+        }
+      })
+
+    try {
+      let res = await doLookup(activeToken)
+      if ((res.status === 401 || res.status === 403) && ownerAccountId) {
+        const refreshed = await forceRefreshAccountToken(ownerAccountId)
+        if (refreshed?.accessToken) {
+          activeToken = refreshed.accessToken
+          res = await doLookup(activeToken)
+        }
+      }
+
+      if (!res.ok) continue
+
+      const users = await res.json()
+      if (Array.isArray(users)) {
+        for (const user of users) {
+          const resolved = extractEpicDisplayName(user)
+          if (user?.id && resolved) {
+            namesMap.set(user.id, resolved)
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error resolving batch Epic display names', err)
+    }
+  }
+
+  return namesMap
+}
+
 export async function fetchFriendsSummary(accessToken?: string, accountId?: string): Promise<{ friends: Friend[]; requests: FriendRequest[] }> {
   if (!accessToken || !accountId) {
     return { friends: [], requests: [] }
@@ -36,15 +109,17 @@ export async function fetchFriendsSummary(accessToken?: string, accountId?: stri
       fetch(url, {
         headers: {
           'Authorization': `bearer ${token}`,
-          'User-Agent': 'Fortnite/++Fortnite+Release-43.10-CL-60118918-Windows'
+          'User-Agent': EPIC_UA
         }
       })
 
-    let res = await doFetch(accessToken)
+    let activeToken = accessToken
+    let res = await doFetch(activeToken)
     if (res.status === 401 || res.status === 403) {
       const refreshed = await forceRefreshAccountToken(accountId)
-      if (refreshed) {
-        res = await doFetch(refreshed.accessToken)
+      if (refreshed?.accessToken) {
+        activeToken = refreshed.accessToken
+        res = await doFetch(activeToken)
       }
     }
 
@@ -53,38 +128,52 @@ export async function fetchFriendsSummary(accessToken?: string, accountId?: stri
     }
 
     const data = await res.json()
+    const rawFriends = Array.isArray(data.friends) ? data.friends : []
+    const rawIncoming = Array.isArray(data.incoming) ? data.incoming : []
+    const rawOutgoing = Array.isArray(data.outgoing) ? data.outgoing : []
+
+    const allIds: string[] = [
+      ...rawFriends.map((f: any) => f.accountId),
+      ...rawIncoming.map((r: any) => r.accountId),
+      ...rawOutgoing.map((r: any) => r.accountId)
+    ]
+
+    const namesMap = await resolveAccountDisplayNames(allIds, activeToken, accountId)
+
     const now = Date.now()
-    const friends: Friend[] = (data.friends || []).map((f: any) => {
-      let isEligible48h = true
-      let hoursRemaining = 0
-      if (f.created) {
-        const createdMs = new Date(f.created).getTime()
-        if (!isNaN(createdMs)) {
-          const diffMs = now - createdMs
-          isEligible48h = diffMs >= 48 * 3600 * 1000
-          hoursRemaining = isEligible48h ? 0 : Math.max(1, Math.ceil((48 * 3600 * 1000 - diffMs) / 3600000))
+    const friends: Friend[] = rawFriends
+      .map((f: any) => {
+        let isEligible48h = true
+        let hoursRemaining = 0
+        if (f.created) {
+          const createdMs = new Date(f.created).getTime()
+          if (!isNaN(createdMs)) {
+            const diffMs = now - createdMs
+            isEligible48h = diffMs >= 48 * 3600 * 1000
+            hoursRemaining = isEligible48h ? 0 : Math.max(1, Math.ceil((48 * 3600 * 1000 - diffMs) / 3600000))
+          }
         }
-      }
-      return {
-        accountId: f.accountId,
-        displayName: f.displayName || f.alias || 'Epic Player',
-        status: 'ONLINE',
-        created: f.created,
-        isEligible48h,
-        hoursRemaining
-      }
-    })
+        return {
+          accountId: f.accountId,
+          displayName: namesMap.get(f.accountId) || f.displayName || f.alias || f.accountId,
+          status: 'ONLINE' as const,
+          created: f.created,
+          isEligible48h,
+          hoursRemaining
+        }
+      })
+      .sort((a: Friend, b: Friend) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' }))
 
     const requests: FriendRequest[] = [
-      ...(data.incoming || []).map((r: any) => ({
+      ...rawIncoming.map((r: any) => ({
         accountId: r.accountId,
-        displayName: r.displayName || 'Incoming Player',
+        displayName: namesMap.get(r.accountId) || r.displayName || r.alias || r.accountId,
         direction: 'INCOMING' as const,
         created: r.created || 'recently'
       })),
-      ...(data.outgoing || []).map((r: any) => ({
+      ...rawOutgoing.map((r: any) => ({
         accountId: r.accountId,
-        displayName: r.displayName || 'Outgoing Player',
+        displayName: namesMap.get(r.accountId) || r.displayName || r.alias || r.accountId,
         direction: 'OUTGOING' as const,
         created: r.created || 'recently'
       }))
@@ -104,8 +193,27 @@ export async function lookupUser(
   const query = displayNameOrId.trim()
   if (!query) return null
 
-  // Fast check: already a 32-character hexadecimal accountId
+  // Fast check: 32-character hexadecimal accountId
   if (/^[0-9a-f]{32}$/i.test(query)) {
+    if (accessToken) {
+      try {
+        const res = await fetch(`https://account-public-service-prod.ol.epicgames.com/account/api/public/account/${query}`, {
+          headers: {
+            Authorization: `bearer ${accessToken}`,
+            'User-Agent': EPIC_UA
+          }
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const resolved = extractEpicDisplayName(data)
+          if (data?.id) {
+            return { id: data.id, displayName: resolved || query }
+          }
+        }
+      } catch {
+        // Fallback to raw accountId below
+      }
+    }
     return { id: query, displayName: query }
   }
 
@@ -117,14 +225,15 @@ export async function lookupUser(
     const url = `https://account-public-service-prod.ol.epicgames.com/account/api/public/account/displayName/${encodeURIComponent(query)}`
     const res = await fetch(url, {
       headers: {
-        Authorization: `bearer ${accessToken}`
+        Authorization: `bearer ${accessToken}`,
+        'User-Agent': EPIC_UA
       }
     })
 
     if (res.ok) {
       const data = await res.json()
       if (data && data.id) {
-        return { id: data.id, displayName: data.displayName || query }
+        return { id: data.id, displayName: extractEpicDisplayName(data) || query }
       }
     }
     return null

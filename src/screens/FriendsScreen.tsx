@@ -76,8 +76,9 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
   }
 
   useEffect(() => {
+    setLoading(true)
     loadData()
-  }, [session])
+  }, [session?.accountId, session?.accessToken])
 
   const handleAccept = async (accountId: string) => {
     await acceptFriendRequest(accountId, session?.accessToken, session?.accountId)
@@ -189,7 +190,9 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
     f.displayName.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const incomingRequests = requests.filter((r) => r.direction === 'INCOMING')
+  const filteredRequests = requests.filter((r) =>
+    r.displayName.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   return (
     <View style={styles.container}>
@@ -305,7 +308,7 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
         />
       ) : (
         <FlatList
-          data={requests}
+          data={filteredRequests}
           keyExtractor={(item) => `${item.direction}-${item.accountId}`}
           renderItem={({ item }) => (
             <FriendItem
